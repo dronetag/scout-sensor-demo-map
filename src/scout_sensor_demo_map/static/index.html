@@ -112,7 +112,7 @@
             center: [13.4777, 52.3791], // Initial map center (Longitude, Latitude)
             zoom: 13
         });
-        
+
         // Get the current hostname and port (default to 8080 if not specified)
         const hostname = window.location.hostname;
         const port = window.location.port || "8080";
@@ -155,7 +155,8 @@
 
         // Handling ODID data (Drones)
         odidWs.onmessage = function (event) {
-            const odidData = JSON.parse(event.data);
+            var datas = event.data.trim().split("\n"); // trim removes trailing newlines
+            const odidData = JSON.parse(datas[datas.length - 1]);
             const uasid = odidData.odid.BasicID[0]?.UASID;
 
             if (!uasid) {
@@ -168,9 +169,23 @@
 
             if (lat && lon) {
                 if (!uasPaths[uasid]) {
+                    const droneMarker = document.createElement('div');
+                    droneMarker.innerText = '🛸';
+                    droneMarker.style.fontSize = '20px';
+                    droneMarker.style.display = 'flex';
+                    droneMarker.style.alignItems = 'center';
+                    droneMarker.style.justifyContent = 'center';
+                    droneMarker.style.width = '36px';
+                    droneMarker.style.height = '36px';
+                    droneMarker.style.backgroundColor = 'white';       // Background for contrast
+                    droneMarker.style.border = '2px solid black';       // Black border
+                    droneMarker.style.borderRadius = '50%';             // Circle
+                    droneMarker.style.boxShadow = '0 0 3px rgba(0,0,0,0.3)'; // Optional shadow
+                    droneMarker.style.cursor = 'pointer';
+
                     uasPaths[uasid] = {
                         path: [],
-                        marker: new maplibregl.Marker().setLngLat([lon, lat]).addTo(map)
+                        marker: new maplibregl.Marker({ element: droneMarker }).setLngLat([lon, lat]).addTo(map)
                             .setPopup(new maplibregl.Popup().setHTML(`<b>UASID: ${uasid}</b><br>Path of the drone`))
                     };
 
@@ -327,9 +342,12 @@
 
             // If the receiver doesn't exist, create a new entry; otherwise, update its details
             if (!receivers[sn]) {
-                receivers[sn] = heartbeatData;
+                receivers[sn] = {
+                    data: heartbeatData,
+                    marker: null
+                }
             } else {
-                receivers[sn] = { ...receivers[sn], ...heartbeatData }; // Update receiver data
+                receivers[sn].data = heartbeatData
             }
 
             // Update active receiver count display
@@ -358,10 +376,29 @@
                     listItem = document.createElement('li');
                     listItem.id = `receiver-${sn}`;  // Assign a unique ID based on SN
                     receiverListElement.appendChild(listItem);
+                }
 
-                    if (receiver.gnss_position) {
+                if (receiver.data.location && !receiver.marker) {
+                    // Create a custom green marker element
+                    const antennaMarker = document.createElement('div');
+                    antennaMarker.innerText = '📡';
+                    antennaMarker.style.fontSize = '20px';
+                    antennaMarker.style.display = 'flex';
+                    antennaMarker.style.alignItems = 'center';
+                    antennaMarker.style.justifyContent = 'center';
+                    antennaMarker.style.width = '36px';
+                    antennaMarker.style.height = '36px';
+                    antennaMarker.style.backgroundColor = 'green';       // Background for contrast
+                    antennaMarker.style.border = '2px solid black';       // Black border
+                    antennaMarker.style.borderRadius = '50%';             // Circle
+                    antennaMarker.style.boxShadow = '0 0 3px rgba(0,0,0,0.3)'; // Optional shadow
+                    antennaMarker.style.cursor = 'pointer';
+                    receiver.marker = new maplibregl.Marker({ element: antennaMarker }).setLngLat([receiver.data.location.longitude, receiver.data.location.latitude]).addTo(map)
+                        .setPopup(new maplibregl.Popup().setHTML(`<b>SN: ${sn}</b>`))
+
+                    if (receiver.data.location) {
                         map.flyTo({
-                            center: receiver.gnss_position,
+                            center: [receiver.data.location.longitude, receiver.data.location.latitude],
                             essential: true,
                             speed: 0.5,
                             curve: 1,
@@ -372,28 +409,34 @@
                     }
                 }
 
+                // Update the marker position
+                if (receiver.data.location && receiver.marker) {
+                    receivers[sn].marker.setLngLat([receiver.data.location.longitude, receiver.data.location.latitude]);
+                }
+
                 // Update the content of the list item
                 listItem.innerHTML = `
             <strong>SN: ${sn}</strong><br>
-            GNSS Satellites: ${receiver.gnss_satelies || 'N/A'}<br>
-            Receivers: ${receiver.receivers}<br>
-            Timestamp: ${receiver.timestamp}  <!-- Display ISO Timestamp -->
+            GNSS Position: ${receiver.data.location ? receiver.data.location.latitude + ", " + receiver.data.location.longitude : 'N/A'}<br>
+            GNSS Satellites: ${receiver.data.satellites}<br>
+            Receivers: ${receiver.data.receivers}<br>
+            Timestamp: ${receiver.data.time}  <!-- Display ISO Timestamp -->
             `;
 
                 // Add hover effect with detailed information on hover
                 listItem.title = `
                 SN: ${sn}
-                GNSS Position: ${receiver.gnss_position ? receiver.gnss_position.join(', ') : 'N/A'}
-                Satellites: ${receiver.gnss_satelies || 'N/A'}
-                Active Receivers: ${receiver.receivers}
-                Timestamp: ${receiver.timestamp}  <!-- ISO Timestamp -->
+                GNSS Position: ${receiver.data.location ? receiver.data.location.latitude + ", " + receiver.data.location.longitude : 'N/A'}
+                Satellites: ${receiver.data.satellites}
+                Active Receivers: ${receiver.data.receivers}
+                Timestamp: ${receiver.data.time}  <!-- ISO Timestamp -->
             `;
 
                 // You can also add click functionality if needed for other features (like centering the map on receiver position)
                 listItem.onclick = function () {
-                    if (receiver.gnss_position) {
+                    if (receiver.data.location) {
                         map.flyTo({
-                            center: receiver.gnss_position,
+                            center: [receiver.data.location.longitude, receiver.data.location.latitude],
                             essential: true,
                             speed: 0.5,
                             curve: 1,
