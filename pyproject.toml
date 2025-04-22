@@ -2,40 +2,32 @@
 requires = ["setuptools >= 68.0"]  # other build dependencies e.g. "mypy-protobuf >= 3.0.0"
 build-backend = "setuptools.build_meta"
 
-# Here is a funny part how to define your own build hooks with setuptools.
-# The file (called __build__.py) must be a top-level file in your project
-# and must be included in your package. Or any subsequent `pip` command
-# won't work. For example please see https://github.com/dronetag/firmware-bundler
-# build-backend = "__build__"
-# backend-path = ["src/your-app"]
-# This crazy stuff should be gone if/when we switch to `pdm` from setuptools.
-# We don't use poetry because it doesn't support standard pyproject.toml nor
-# it has build hooks as pdm.
-
 [project]
-name = "your-app"
+name = "scout-sensor-demo-map"
 requires-python = ">=3.10"
 description = ""
 license.text = "MIT"
 authors = [
-  {name = "Your Name", email = "your-name@dronetag.cz"},
+  {name = "Tomas Benes", email = "tomas@dronetag.cz"},
 ]
 dependencies=[
-  # "some-lib ==2.1.3",
-  # "other-lib >=2.1.3,<3.0",
+  "aiohttp >= 3.11.11,<4.0",
+  "websockets >=15.0.1,<16.0",
+  "aiomqtt >=2.3.2,<3.0"
 ]
 
 dynamic = ["version", "readme"]
 
 [tool.setuptools]
 package-dir = {"" = "src"}
+include-package-data = true
 
 [tool.setuptools.dynamic]
-version = {attr = "your_app.__version__.version"}
+version = {attr = "scout_sensor_demo_map.__version__.version"}
 readme = {file = ["README.md"]}
 
 [project.scripts]
-your-entrypoint = "your_app.cli:main"
+scout-sensor-demo-map = "scout_sensor_demo_map.cli:main"
 
 [project.optional-dependencies]
 # extra dependencies for development

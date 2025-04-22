@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OSM with Receivers, Heartbeats, and Drones (MapLibre)</title>
+    <link href="https://unpkg.com/maplibre-gl@2.4.0/dist/maplibre-gl.css" rel="stylesheet">
+    <script src="https://unpkg.com/maplibre-gl@2.4.0/dist/maplibre-gl.js"></script>
+    <style>
+        #map {
+            width: 100%;
+            height: 98vh;
+        }
+
+        #ws-status {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 10px;
+            border-radius: 5px;
+        }
+
+        #receiver-status {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 10px;
+            border-radius: 5px;
+        }
+
+        #overview {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            background: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 10px;
+            border-radius: 5px;
+            max-height: 600px;
+            overflow-y: auto;
+            width: 200px;
+        }
+
+        #overview ul {
+            list-style-type: none;
+            padding: 0;
+        }
+
+        #overview li {
+            padding: 5px;
+            cursor: pointer;
+        }
+
+        #overview li:hover {
+            background-color: rgba(255, 255, 255, 0.2);
+        }
+    </style>
+</head>
+
+<body>
+
+    <div id="map"></div>
+    <div id="ws-status">
+        <p><strong>WebSocket Status</strong></p>
+        <p id="odid-status">ODID WebSocket: <span style="color: red;">Disconnected</span></p>
+        <p id="heartbeat-status">Heartbeat WebSocket: <span style="color: red;">Disconnected</span></p>
+    </div>
+    <!-- Active Receiver Summary (Updated) -->
+    <div id="receiver-status">
+        <p><strong>Receivers</strong></p>
+        <p id="active-receivers">0 active</p>
+        <ul id="receiver-list"></ul> <!-- Added list for receivers -->
+    </div>
+    <div id="overview">
+        <p><strong>Drone Overview</strong></p>
+        <ul id="drone-list">
+            <!-- Drone list items will be populated here -->
+        </ul>
+    </div>
+
+    <script>
+        // Initialize the map using MapLibre GL JS with OSM road tiles
+        const map = new maplibregl.Map({
+            container: 'map',
+            style: {
+                "version": 8,
+                "sources": {
+                    "osm": {
+                        "type": "raster",
+                        "tiles": [
+                            "https://a.tile.openstreetmap.org/{z}/{x}/{y}.png",
+                            "https://b.tile.openstreetmap.org/{z}/{x}/{y}.png",
+                            "https://c.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                        ],
+                        "tileSize": 256
+                    }
+                },
+                "layers": [
+                    {
+                        "id": "osm-layer",
+                        "type": "raster",
+                        "source": "osm",
+                        "paint": {}
+                    }
+                ]
+            },
+            center: [13.4777, 52.3791], // Initial map center (Longitude, Latitude)
+            zoom: 13
+        });
+        
+        // Get the current hostname and port (default to 8080 if not specified)
+        const hostname = window.location.hostname;
+        const port = window.location.port || "8080";
+
+        // WebSocket URLs using the current domain and port
+        const odidWs = new WebSocket(`ws://${hostname}:${port}/ws/odid`);
+        const heartbeatWs = new WebSocket(`ws://${hostname}:${port}/ws/heartbeat`);
+
+        // WebSocket status elements
+        const odidStatusElement = document.getElementById('odid-status');
+        const heartbeatStatusElement = document.getElementById('heartbeat-status');
+        const activeReceiversElement = document.getElementById('active-receivers');
+        const droneListElement = document.getElementById('drone-list');
+
+        // Store UASID paths (keyed by UASID)
+        let uasPaths = {};
+        let receivers = {}; // Stores active receivers by 'sn'
+
+        // WebSocket for ODID data (Drones)
+        odidWs.onopen = function () {
+            odidStatusElement.innerHTML = 'ODID WebSocket: <span style="color: green;">Connected</span>';
+        };
+        odidWs.onclose = function () {
+            odidStatusElement.innerHTML = 'ODID WebSocket: <span style="color: red;">Disconnected</span>';
+        };
+        odidWs.onerror = function () {
+            odidStatusElement.innerHTML = 'ODID WebSocket: <span style="color: orange;">Error</span>';
+        };
+
+        // WebSocket for Heartbeat data
+        heartbeatWs.onopen = function () {
+            heartbeatStatusElement.innerHTML = 'Heartbeat WebSocket: <span style="color: green;">Connected</span>';
+        };
+        heartbeatWs.onclose = function () {
+            heartbeatStatusElement.innerHTML = 'Heartbeat WebSocket: <span style="color: red;">Disconnected</span>';
+        };
+        heartbeatWs.onerror = function () {
+            heartbeatStatusElement.innerHTML = 'Heartbeat WebSocket: <span style="color: orange;">Error</span>';
+        };
+
+        // Handling ODID data (Drones)
+        odidWs.onmessage = function (event) {
+            const odidData = JSON.parse(event.data);
+            const uasid = odidData.odid.BasicID[0]?.UASID;
+
+            if (!uasid) {
+                return; // Ignore if no UASID
+            }
+
+            const location = odidData.odid.Location;
+            const lat = location?.Latitude;
+            const lon = location?.Longitude;
+
+            if (lat && lon) {
+                if (!uasPaths[uasid]) {
+                    uasPaths[uasid] = {
+                        path: [],
+                        marker: new maplibregl.Marker().setLngLat([lon, lat]).addTo(map)
+                            .setPopup(new maplibregl.Popup().setHTML(`<b>UASID: ${uasid}</b><br>Path of the drone`))
+                    };
+
+                    // Initialize GeoJSON source for the path
+                    map.addSource(uasid, {
+                        type: 'geojson',
+                        data: {
+                            type: 'FeatureCollection',
+                            features: [{
+                                type: 'Feature',
+                                geometry: {
+                                    type: 'LineString',
+                                    coordinates: []
+                                }
+                            }]
+                        }
+                    });
+
+                    // Create a LineLayer for the path
+                    map.addLayer({
+                        id: `${uasid}-path`,
+                        type: 'line',
+                        source: uasid,
+                        paint: {
+                            'line-color': '#007bff',
+                            'line-width': 2
+                        }
+                    });
+                }
+
+                // Add new location to path
+                uasPaths[uasid].path.push([lon, lat]);
+
+                // Update the marker position
+                uasPaths[uasid].marker.setLngLat([lon, lat]);
+
+                // Update GeoJSON source data to reflect the new path
+                map.getSource(uasid).setData({
+                    type: 'FeatureCollection',
+                    features: [{
+                        type: 'Feature',
+                        geometry: {
+                            type: 'LineString',
+                            coordinates: uasPaths[uasid].path
+                        }
+                    }]
+                });
+
+                // Add a popup with structured information for the drone marker
+                const popupContent = `
+          <strong>UASID:</strong> ${uasid}<br>
+          <strong>RSSI:</strong> ${odidData.rssi} dBm<br>
+          <strong>Technology:</strong> ${odidData.tech}<br>
+          <strong>Timestamp:</strong> ${new Date(odidData.odid.Location.Timestamp).toLocaleString()}
+        `;
+                uasPaths[uasid].marker.setPopup(new maplibregl.Popup().setHTML(popupContent));
+
+                // Update the drone list in the overview section
+                updateDroneList(uasid, odidData.rssi, odidData.tech, odidData.odid.Location.Timestamp);
+
+                // Optionally, update map center if the marker is out of view
+                if (!map.getBounds().contains([lon, lat])) {
+                    map.flyTo({
+                        center: [lon, lat],
+                        essential: true, // Ensure the flyTo action is triggered immediately
+                        speed: 0.5,
+                        curve: 1,
+                        easing(t) {
+                            return t;
+                        }
+                    });
+                }
+            }
+        };
+
+
+        // Update drone list panel
+        function updateDroneList() {
+            // Clear the current list
+            droneListEl.innerHTML = '';
+
+            // Loop through the drones and create the list items
+            Object.keys(drones).forEach(uasid => {
+                const drone = drones[uasid];
+
+                let item = document.getElementById(`drone-${uasid}`);
+                if (!item) {
+                    item = document.createElement('li');
+                    item.id = `drone-${uasid}`;
+                    item.onclick = () => {
+                        const marker = uasPaths[uasid]?.marker;
+                        if (marker) {
+                            map.flyTo({
+                                center: marker.getLngLat(),
+                                speed: 0.5,
+                                curve: 1
+                            });
+                        }
+                    };
+                    droneListEl.appendChild(item);
+                }
+
+                item.innerHTML = `
+            <strong>${drone.uasid}</strong><br>
+            RSSI: ${drone.rssi}, Tech: ${drone.tech}<br>
+            ${new Date(drone.timestamp).toLocaleTimeString()}
+        `;
+            });
+        }
+
+        // Helper function to update the drone list in the overview
+        function updateDroneList(uasid, rssi, tech, timestamp) {
+            // Check if the drone already exists in the list
+            let listItem = document.getElementById(`drone-${uasid}`);
+
+            // If the drone does not exist, create a new list item
+            if (!listItem) {
+                listItem = document.createElement('li');
+                listItem.id = `drone-${uasid}`;  // Assign a unique ID based on UASID
+                droneListElement.appendChild(listItem);
+            }
+
+            // Update the content of the existing or new list item
+            listItem.innerHTML = `
+            <strong>${uasid}</strong><br>
+            RSSI: ${rssi} dBm<br>
+            Tech: ${tech}<br>
+            Timestamp: ${new Date(timestamp).toLocaleString()}
+        `;
+
+            // Add click functionality to center the map on the drone's marker
+            listItem.onclick = function () {
+                const marker = uasPaths[uasid]?.marker;
+                if (marker) {
+                    map.flyTo({
+                        center: marker.getLngLat(),
+                        essential: true,
+                        speed: 1,
+                        curve: 1,
+                        easing(t) {
+                            return t;
+                        }
+                    });
+                }
+            };
+        }
+
+        // Handling Heartbeat data
+        heartbeatWs.onmessage = function (event) {
+            const heartbeatData = JSON.parse(event.data);
+
+            // Update active receivers count and display
+            const sn = heartbeatData.sn;
+
+            // If the receiver doesn't exist, create a new entry; otherwise, update its details
+            if (!receivers[sn]) {
+                receivers[sn] = heartbeatData;
+            } else {
+                receivers[sn] = { ...receivers[sn], ...heartbeatData }; // Update receiver data
+            }
+
+            // Update active receiver count display
+            activeReceiversElement.innerHTML = `Active Receivers: ${Object.keys(receivers).length}`;
+
+            // Update the receivers list in the UI
+            updateReceiverList();
+        };
+
+        // Function to update the receiver list
+        function updateReceiverList() {
+            const receiverListElement = document.getElementById("receiver-list");
+
+            // Clear the current list
+            receiverListElement.innerHTML = '';
+
+            // Loop through the receivers and create/update the list items
+            Object.keys(receivers).forEach(sn => {
+                const receiver = receivers[sn];
+
+                // Create a list item for this receiver
+                let listItem = document.getElementById(`receiver-${sn}`);
+
+                // If the receiver doesn't exist, create a new list item
+                if (!listItem) {
+                    listItem = document.createElement('li');
+                    listItem.id = `receiver-${sn}`;  // Assign a unique ID based on SN
+                    receiverListElement.appendChild(listItem);
+
+                    if (receiver.gnss_position) {
+                        map.flyTo({
+                            center: receiver.gnss_position,
+                            essential: true,
+                            speed: 0.5,
+                            curve: 1,
+                            easing(t) {
+                                return t;
+                            }
+                        });
+                    }
+                }
+
+                // Update the content of the list item
+                listItem.innerHTML = `
+            <strong>SN: ${sn}</strong><br>
+            GNSS Satellites: ${receiver.gnss_satelies || 'N/A'}<br>
+            Receivers: ${receiver.receivers}<br>
+            Timestamp: ${receiver.timestamp}  <!-- Display ISO Timestamp -->
+            `;
+
+                // Add hover effect with detailed information on hover
+                listItem.title = `
+                SN: ${sn}
+                GNSS Position: ${receiver.gnss_position ? receiver.gnss_position.join(', ') : 'N/A'}
+                Satellites: ${receiver.gnss_satelies || 'N/A'}
+                Active Receivers: ${receiver.receivers}
+                Timestamp: ${receiver.timestamp}  <!-- ISO Timestamp -->
+            `;
+
+                // You can also add click functionality if needed for other features (like centering the map on receiver position)
+                listItem.onclick = function () {
+                    if (receiver.gnss_position) {
+                        map.flyTo({
+                            center: receiver.gnss_position,
+                            essential: true,
+                            speed: 0.5,
+                            curve: 1,
+                            easing(t) {
+                                return t;
+                            }
+                        });
+                    }
+                };
+            });
+        }
+    </script>
+</body>
+
+</html>
