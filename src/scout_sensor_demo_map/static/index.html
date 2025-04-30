@@ -378,7 +378,7 @@
                     receiverListElement.appendChild(listItem);
                 }
 
-                if (receiver.data.location && !receiver.marker) {
+                if (receiver.data.gnss_location && !receiver.marker) {
                     // Create a custom green marker element
                     const antennaMarker = document.createElement('div');
                     antennaMarker.innerText = '📡';
@@ -393,12 +393,12 @@
                     antennaMarker.style.borderRadius = '50%';             // Circle
                     antennaMarker.style.boxShadow = '0 0 3px rgba(0,0,0,0.3)'; // Optional shadow
                     antennaMarker.style.cursor = 'pointer';
-                    receiver.marker = new maplibregl.Marker({ element: antennaMarker }).setLngLat([receiver.data.location.longitude, receiver.data.location.latitude]).addTo(map)
+                    receiver.marker = new maplibregl.Marker({ element: antennaMarker }).setLngLat(receiver.data.gnss_location.reverse()).addTo(map)
                         .setPopup(new maplibregl.Popup().setHTML(`<b>SN: ${sn}</b>`))
 
-                    if (receiver.data.location) {
+                    if (receiver.data.gnss_location) {
                         map.flyTo({
-                            center: [receiver.data.location.longitude, receiver.data.location.latitude],
+                            center: receiver.data.gnss_location.reverse(),
                             essential: true,
                             speed: 0.5,
                             curve: 1,
@@ -410,33 +410,33 @@
                 }
 
                 // Update the marker position
-                if (receiver.data.location && receiver.marker) {
-                    receivers[sn].marker.setLngLat([receiver.data.location.longitude, receiver.data.location.latitude]);
+                if (receiver.data.gnss_location && receiver.marker) {
+                    receivers[sn].marker.setLngLat(receiver.data.gnss_location.reverse());
                 }
 
                 // Update the content of the list item
                 listItem.innerHTML = `
             <strong>SN: ${sn}</strong><br>
-            GNSS Position: ${receiver.data.location ? receiver.data.location.latitude + ", " + receiver.data.location.longitude : 'N/A'}<br>
-            GNSS Satellites: ${receiver.data.satellites}<br>
+            GNSS Position: ${receiver.data.gnss_location ? receiver.data.gnss_location : 'N/A'}<br>
+            GNSS Satellites: ${receiver.data.gnss_satellites}<br>
             Receivers: ${receiver.data.receivers}<br>
-            Timestamp: ${receiver.data.time}  <!-- Display ISO Timestamp -->
+            Timestamp: ${new Date(receiver.data.timestamp * 1000).toISOString()}
             `;
 
                 // Add hover effect with detailed information on hover
                 listItem.title = `
                 SN: ${sn}
-                GNSS Position: ${receiver.data.location ? receiver.data.location.latitude + ", " + receiver.data.location.longitude : 'N/A'}
-                Satellites: ${receiver.data.satellites}
+                GNSS Position: ${receiver.data.gnss_location ? receiver.data.gnss_location : 'N/A'}
+                Satellites: ${receiver.data.gnss_satellites}
                 Active Receivers: ${receiver.data.receivers}
-                Timestamp: ${receiver.data.time}  <!-- ISO Timestamp -->
+                Timestamp: ${new Date(receiver.data.timestamp * 1000).toISOString()}
             `;
 
                 // You can also add click functionality if needed for other features (like centering the map on receiver position)
                 listItem.onclick = function () {
-                    if (receiver.data.location) {
+                    if (receiver.data.gnss_location) {
                         map.flyTo({
-                            center: [receiver.data.location.longitude, receiver.data.location.latitude],
+                            center: receiver.data.gnss_location.reverse(),
                             essential: true,
                             speed: 0.5,
                             curve: 1,
