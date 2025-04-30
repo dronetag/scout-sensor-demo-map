@@ -72,7 +72,7 @@
     </div>
     <!-- Active Receiver Summary (Updated) -->
     <div id="receiver-status">
-        <p><strong>Receivers</strong></p>
+        <p><strong>Dronetag Sensors</strong></p>
         <p id="active-receivers">0 active</p>
         <ul id="receiver-list"></ul> <!-- Added list for receivers -->
     </div>
@@ -351,7 +351,7 @@
             }
 
             // Update active receiver count display
-            activeReceiversElement.innerHTML = `Active Receivers: ${Object.keys(receivers).length}`;
+            activeReceiversElement.innerHTML = `Active: ${Object.keys(receivers).length}`;
 
             // Update the receivers list in the UI
             updateReceiverList();
@@ -419,7 +419,7 @@
             <strong>SN: ${sn}</strong><br>
             GNSS Position: ${receiver.data.gnss_location ? receiver.data.gnss_location : 'N/A'}<br>
             GNSS Satellites: ${receiver.data.gnss_satellites}<br>
-            Receivers: ${receiver.data.receivers}<br>
+            Active Receivers: ${receiver.data.receivers}<br>
             Timestamp: ${new Date(receiver.data.timestamp * 1000).toISOString()}
             `;
 
