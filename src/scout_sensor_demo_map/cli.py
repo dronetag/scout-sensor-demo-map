@@ -1,11 +1,11 @@
-import asyncio
-import json
-import subprocess
-import os
 import argparse
-from typing import Set, Dict, Union
-from aiohttp import web, WSMsgType
+import asyncio
+import os
+import subprocess
+from typing import Dict, Set, Union
+
 import aiomqtt
+from aiohttp import web
 
 # Queues for incoming ODID and heartbeat messages
 odid_queue: asyncio.Queue[str] = asyncio.Queue()
