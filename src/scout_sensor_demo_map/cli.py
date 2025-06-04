@@ -1,11 +1,15 @@
 import argparse
 import asyncio
 import os
+import shutil
 import subprocess
 from typing import Dict, Set, Union
 
 import aiomqtt
 from aiohttp import web
+
+
+MQTT_SERVER_BINARY = shutil.which("mosquitto")
 
 # Queues for incoming ODID and heartbeat messages
 odid_queue: asyncio.Queue[str] = asyncio.Queue()
@@ -59,9 +63,9 @@ async def handle_heartbeat(request: web.Request) -> web.Response:
 
 
 # ---------- MQTT Subscriber with aiomqtt ----------
-async def mqtt_handler(mqtt_port: int) -> None:
+async def mqtt_handler(mqtt_addr: str, mqtt_port: int) -> None:
     client_kwargs: Dict[str, Union[str, int]] = {
-        "hostname": "localhost",
+        "hostname": mqtt_addr,
         "port": mqtt_port,
     }
 
@@ -80,7 +84,7 @@ async def mqtt_handler(mqtt_port: int) -> None:
 
 # ---------- Mosquitto Process Starter ----------
 def start_mosquitto(mosquitto_port: int) -> subprocess.Popen:
-    mosquitto_cmd = ["mosquitto", "-p", str(mosquitto_port)]
+    mosquitto_cmd = [MQTT_SERVER_BINARY, "-p", str(mosquitto_port)]
     return subprocess.Popen(mosquitto_cmd)
 
 
@@ -88,7 +92,7 @@ def start_mosquitto(mosquitto_port: int) -> subprocess.Popen:
 async def start_background(app: web.Application) -> None:
     app["odid_broadcast"] = asyncio.create_task(broadcast(odid_queue, odid_clients))
     app["heartbeat_broadcast"] = asyncio.create_task(broadcast(heartbeat_queue, heartbeat_clients))
-    app["mqtt_task"] = asyncio.create_task(mqtt_handler(app["mqtt_port"]))
+    app["mqtt_task"] = asyncio.create_task(mqtt_handler(app["mqtt_addr"], app["mqtt_port"]))
 
 
 async def cleanup_background(app: web.Application) -> None:
@@ -131,18 +135,33 @@ def main() -> None:
         description="Start the server with WebSocket and MQTT support."
     )
     parser.add_argument("--http-port", type=int, default=8080, help="HTTP server port.")
+    parser.add_argument(
+        "--mqtt-address", type=str, default="localhost", help="MQTT broker address."
+    )
     parser.add_argument("--mqtt-port", type=int, default=1883, help="MQTT broker port.")
+    parser.add_argument(
+        "--mqtt-start", action="store_true", help="Start the MQTT broker by the sample."
+    )
     args = parser.parse_args()
 
     # Store MQTT config in app state
     app["mqtt_port"] = args.mqtt_port
+    app["mqtt_addr"] = args.mqtt_address
 
-    mosquitto_proc = start_mosquitto(args.mqtt_port)
+    mosquitto_proc = None
+    if args.mqtt_start:
+        if not MQTT_SERVER_BINARY:
+            print("Cannot start local mosquitto instance")
+            exit(1)
+
+        print("Starting local mosquitto instance")
+        mosquitto_proc = start_mosquitto(args.mqtt_port)
 
     try:
         web.run_app(app, port=args.http_port)
     finally:
-        mosquitto_proc.terminate()
+        if mosquitto_proc:
+            mosquitto_proc.terminate()
 
 
 if __name__ == "__main__":
