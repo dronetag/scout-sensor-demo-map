@@ -66,9 +66,14 @@
 
     <div id="map"></div>
     <div id="ws-status">
-        <p><strong>WebSocket Status</strong></p>
-        <p id="odid-status">ODID WebSocket: <span style="color: red;">Disconnected</span></p>
-        <p id="heartbeat-status">Heartbeat WebSocket: <span style="color: red;">Disconnected</span></p>
+        <div class="flex">
+            <label for="connection-url">Connection:</label>
+            <input type="text" id="connection-url" placeholder="localhost" value="" style="margin-bottom: 10px;">
+            <button id="connect-button">Connect</button>
+        </div>
+        <p id="connection-status"><strong>Connection Status</strong></p>
+        <p id="odid-status">Data: <span style="color: red;">Disconnected</span></p>
+        <p id="heartbeat-status">Heartbeat: <span style="color: red;">Disconnected</span></p>
     </div>
     <!-- Active Receiver Summary (Updated) -->
     <div id="receiver-status">
@@ -113,48 +118,98 @@
             zoom: 13
         });
 
-        // Get the current hostname and port (default to 8080 if not specified)
-        const hostname = window.location.hostname;
-        const port = window.location.port || "8080";
-
-        // WebSocket URLs using the current domain and port
-        const odidWs = new WebSocket(`ws://${hostname}:${port}/ws/odid`);
-        const heartbeatWs = new WebSocket(`ws://${hostname}:${port}/ws/heartbeat`);
-
-        // WebSocket status elements
-        const odidStatusElement = document.getElementById('odid-status');
-        const heartbeatStatusElement = document.getElementById('heartbeat-status');
-        const activeReceiversElement = document.getElementById('active-receivers');
-        const droneListElement = document.getElementById('drone-list');
-
         // Store UASID paths (keyed by UASID)
         let uasPaths = {};
         let receivers = {}; // Stores active receivers by 'sn'
 
-        // WebSocket for ODID data (Drones)
-        odidWs.onopen = function () {
-            odidStatusElement.innerHTML = 'ODID WebSocket: <span style="color: green;">Connected</span>';
-        };
-        odidWs.onclose = function () {
-            odidStatusElement.innerHTML = 'ODID WebSocket: <span style="color: red;">Disconnected</span>';
-        };
-        odidWs.onerror = function () {
-            odidStatusElement.innerHTML = 'ODID WebSocket: <span style="color: orange;">Error</span>';
-        };
+        var odidWs = null;
+        var heartbeatWs = null;
 
-        // WebSocket for Heartbeat data
-        heartbeatWs.onopen = function () {
-            heartbeatStatusElement.innerHTML = 'Heartbeat WebSocket: <span style="color: green;">Connected</span>';
-        };
-        heartbeatWs.onclose = function () {
-            heartbeatStatusElement.innerHTML = 'Heartbeat WebSocket: <span style="color: red;">Disconnected</span>';
-        };
-        heartbeatWs.onerror = function () {
-            heartbeatStatusElement.innerHTML = 'Heartbeat WebSocket: <span style="color: orange;">Error</span>';
-        };
+        function connect() {
+            const odidStatusElement = document.getElementById('odid-status');
+            const heartbeatStatusElement = document.getElementById('heartbeat-status');
+            const droneListElement = document.getElementById('drone-list');
+
+            // Get the connection URL from the input field
+            let connectionUrl = document.getElementById('connection-url').value.trim();
+            let hostname = window.location.hostname
+            let port = window.location.port || "9090"; // Default to 9090 if no port is specified
+
+            if (connectionUrl) {
+                // Update WebSocket URLs based on the provided connection URL
+                const urlParts = connectionUrl.replace(/^[^:]+:\/\//, '').split(":");
+                hostname = urlParts[0];
+                port = urlParts[1] || "9090"; // Default to 9090 if no port is specified
+            }
+            console.log(`Requested connection to ${hostname}:${port}`);
+            if (odidWs) {
+                console.log(`Closing existing ODID WebSocket connection`);
+                odidWs.close(); // Close existing ODID WebSocket if it exists
+            }
+            if (heartbeatWs) {
+                console.log(`Closing existing Heartbeat WebSocket connection`);
+                heartbeatWs.close(); // Close existing Heartbeat WebSocket if it exists
+            }
+            if (odidWs || heartbeatWs) {
+                document.getElementById('connection-status').innerHTML = '<strong>Connection Status:</strong> Disconnecting';
+                console.log(`WebSocket connections already exist, close them before creating new ones.`);
+                return; // Prevent creating new connections if they already exist
+            }
+            document.getElementById('connection-status').innerHTML = '<strong>Connection Status:</strong> Connecting...';
+
+            // Clear existing paths and markers
+            uasPaths = {};
+            receivers = {}; // Reset receivers
+
+            // Clear the drone list in the overview section
+            droneListElement.innerHTML = '';
+
+            // Create WebSocket connections for ODID and Heartbeat
+            odidWs = new WebSocket(`ws://${hostname}:${port}/ws/odid`);
+            heartbeatWs = new WebSocket(`ws://${hostname}:${port}/ws/heartbeat`);
+
+            // Update status elements
+            odidStatusElement.innerHTML = 'ODID WebSocket: <span style="color: orange;">Connecting...</span>';
+            heartbeatStatusElement.innerHTML = 'Heartbeat WebSocket: <span style="color: orange;">Connecting...</span>';
+
+            // WebSocket for ODID data (Drones)
+            odidWs.onopen = function () {
+                odidStatusElement.innerHTML = 'ODID WebSocket: <span style="color: green;">Connected</span>';
+                document.getElementById('connection-status').innerHTML = '<strong>Connection Status: Connected</strong>';
+                document.getElementById('connect-button').innerText = 'disconnect';
+            };
+            odidWs.onclose = function () {
+                odidStatusElement.innerHTML = 'ODID WebSocket: <span style="color: red;">Disconnected</span>';
+                odidWs = null; // Clear the WebSocket reference
+                document.getElementById('connection-status').innerHTML = '<strong>Connection Status: Disconnected</strong>';
+                document.getElementById('connect-button').innerText = 'connect';
+            };
+            odidWs.onerror = function () {
+                odidStatusElement.innerHTML = 'ODID WebSocket: <span style="color: orange;">Error</span>';
+            };
+
+            // WebSocket for Heartbeat data
+            heartbeatWs.onopen = function () {
+                heartbeatStatusElement.innerHTML = 'Heartbeat WebSocket: <span style="color: green;">Connected</span>';
+                document.getElementById('connection-status').innerHTML = '<strong>Connection Status: Connected</strong>';
+                document.getElementById('connect-button').innerText = 'disconnect';
+            };
+            heartbeatWs.onclose = function () {
+                heartbeatStatusElement.innerHTML = 'Heartbeat WebSocket: <span style="color: red;">Disconnected</span>';
+                heartbeatWs = null; // Clear the WebSocket reference
+                document.getElementById('connection-status').innerHTML = '<strong>Connection Status: Disconnected</strong>';
+                document.getElementById('connect-button').innerText = 'connect';
+            };
+            heartbeatWs.onerror = function () {
+                heartbeatStatusElement.innerHTML = 'Heartbeat WebSocket: <span style="color: orange;">Error</span>';
+            };
+
+            odidWs.onmessage = onmessage_odid; // Assign the onmessage function to handle ODID data
+            heartbeatWs.onmessage = onmessage_heartbeat; // Assign the onmessage function to handle Heartbeat data
+        }
 
         // Handling ODID data (Drones)
-        odidWs.onmessage = function (event) {
+        function onmessage_odid(event) {
             var datas = event.data.trim().split("\n"); // trim removes trailing newlines
             const odidData = JSON.parse(datas[datas.length - 1]);
             const uasid = odidData.odid.BasicID[0]?.UASID;
@@ -298,6 +353,7 @@
 
         // Helper function to update the drone list in the overview
         function updateDroneList(uasid, rssi, tech, timestamp) {
+            const droneListElement = document.getElementById('drone-list');
             // Check if the drone already exists in the list
             let listItem = document.getElementById(`drone-${uasid}`);
 
@@ -334,11 +390,16 @@
         }
 
         // Handling Heartbeat data
-        heartbeatWs.onmessage = function (event) {
+        function onmessage_heartbeat(event) {
+            const activeReceiversElement = document.getElementById('active-receivers');
             const heartbeatData = JSON.parse(event.data);
 
             // Update active receivers count and display
             const sn = heartbeatData.sn;
+            if(!sn) {
+                console.warn("Heartbeat data received without SN:", heartbeatData);
+                return; // Ignore if no SN is present
+            }
 
             // If the receiver doesn't exist, create a new entry; otherwise, update its details
             if (!receivers[sn]) {
@@ -451,6 +512,14 @@
                 };
             });
         }
+
+        window.addEventListener('load', () => {
+            document.getElementById('connect-button').addEventListener('click', connect);
+            if (window.location.hostname != "localhost") {
+                document.getElementById('connection-url').placeholder = `${window.location.hostname}:${window.location.port || "9090"}`;
+            }
+            connect();
+        });
     </script>
 </body>
 
