@@ -131,16 +131,41 @@
             const droneListElement = document.getElementById('drone-list');
 
             // Get the connection URL from the input field
+            // Get connection URL input (if any)
             let connectionUrl = document.getElementById('connection-url').value.trim();
-            let hostname = window.location.hostname
-            let port = window.location.port || "9090"; // Default to 9090 if no port is specified
 
-            if (connectionUrl) {
-                // Update WebSocket URLs based on the provided connection URL
-                const urlParts = connectionUrl.replace(/^[^:]+:\/\//, '').split(":");
-                hostname = urlParts[0];
-                port = urlParts[1] || "9090"; // Default to 9090 if no port is specified
+            // Use provided connection URL or fallback to current page URL
+            let url = connectionUrl ? new URL(connectionUrl) : new URL(window.location.href);
+
+            // Extract hostname, port, and path
+            let hostname = url.hostname;
+            let path = url.pathname;
+
+            // Determine port: use explicitly set port, or infer from protocol
+            let port;
+            if (url.port) {
+                port = url.port;
+            } else if (url.protocol === "http:") {
+                port = "80";
+            } else if (url.protocol === "https:") {
+                port = "443";
             }
+
+            // Remove trailing slash from path if it exists
+            if (path.endsWith('/')) {
+                path = path.slice(0, -1);
+            }
+
+            // Append /ws to the path
+            let websocketPath = `${path}/ws`;
+
+            // Use wss for https, ws otherwise
+            let protocol = url.protocol === "https:" ? "wss" : "ws";
+
+            // Construct the final WebSocket URL
+            let wsUrl = `${protocol}://${hostname}:${port}${websocketPath}`;
+
+            console.log("WebSocket URL:", wsUrl);
             console.log(`Requested connection to ${hostname}:${port}`);
             if (odidWs) {
                 console.log(`Closing existing ODID WebSocket connection`);
@@ -165,8 +190,8 @@
             droneListElement.innerHTML = '';
 
             // Create WebSocket connections for ODID and Heartbeat
-            odidWs = new WebSocket(`ws://${hostname}:${port}/ws/odid`);
-            heartbeatWs = new WebSocket(`ws://${hostname}:${port}/ws/heartbeat`);
+            odidWs = new WebSocket(`${wsUrl}/odid`);
+            heartbeatWs = new WebSocket(`${wsUrl}/heartbeat`);
 
             // Update status elements
             odidStatusElement.innerHTML = 'ODID WebSocket: <span style="color: orange;">Connecting...</span>';
@@ -515,9 +540,7 @@
 
         window.addEventListener('load', () => {
             document.getElementById('connect-button').addEventListener('click', connect);
-            if (window.location.hostname != "localhost") {
-                document.getElementById('connection-url').placeholder = `${window.location.hostname}:${window.location.port || "9090"}`;
-            }
+            document.getElementById('connection-url').placeholder = `${window.location.href}`;
             connect();
         });
     </script>
