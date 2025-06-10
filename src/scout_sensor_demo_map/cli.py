@@ -21,6 +21,11 @@ def main() -> None:
     parser.add_argument("--http-port", type=int, default=9090, help="HTTP server port.")
     parser.add_argument("--mqtt-port", type=int, default=1883, help="MQTT broker port.")
     parser.add_argument(
+        "--http-local-only",
+        action="store_true",
+        help="Whether the http should be bind only to localhost",
+    )
+    parser.add_argument(
         "--mqtt-address", type=str, default="localhost", help="MQTT broker address."
     )
     parser.add_argument(
@@ -44,8 +49,12 @@ def main() -> None:
         print("Starting local mosquitto instance")
         mosquitto_proc = start_mosquitto(args.mqtt_port)
 
+    http_host = None
+    if args.http_local_only:
+        http_host = "127.0.0.1"
+
     try:
-        server.run(http_port=args.http_port, mqtt_port=args.mqtt_port, mqtt_addr=args.mqtt_address)
+        server.run(http_port=args.http_port, http_host=http_host, mqtt_port=args.mqtt_port, mqtt_addr=args.mqtt_address)
     finally:
         if mosquitto_proc:
             mosquitto_proc.terminate()

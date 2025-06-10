@@ -1,7 +1,7 @@
 import asyncio
 import logging
 import os
-from typing import Dict, Set, Union, cast
+from typing import Dict, Optional, Set, Union, cast
 
 import aiomqtt
 from aiohttp import web
@@ -104,7 +104,12 @@ async def cleanup_background(app: web.Application) -> None:
             task.cancel()
 
 
-def run(http_port: int = 9090, mqtt_port: int = 1883, mqtt_addr: str = "") -> None:
+def run(
+    http_port: int = 9090,
+    http_host: Optional[str] = None,
+    mqtt_port: int = 1883,
+    mqtt_addr: str = "",
+) -> None:
     app: web.Application = web.Application()
     app["mqtt_addr"] = mqtt_addr
     app["mqtt_port"] = mqtt_port
@@ -124,4 +129,4 @@ def run(http_port: int = 9090, mqtt_port: int = 1883, mqtt_addr: str = "") -> No
 
     app.on_startup.append(start_background)
     app.on_cleanup.append(cleanup_background)
-    web.run_app(app, port=http_port)
+    web.run_app(app, host=http_host, port=http_port)
