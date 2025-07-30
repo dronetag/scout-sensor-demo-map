@@ -31,12 +31,13 @@ def main() -> None:
     parser.add_argument(
         "--mqtt-start", action="store_true", help="Start the MQTT broker on given port."
     )
+    parser.add_argument("--silent", action="store_true", help="Enable silent logging.")
     parser.add_argument("--debug", action="store_true", help="Enable debug logging.")
     args = parser.parse_args()
 
     # Set up logging
     logging.basicConfig(
-        level=logging.DEBUG if args.debug else logging.INFO,
+        level=logging.WARNING if args.silent else logging.DEBUG if args.debug else logging.INFO,
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     )
 
@@ -54,7 +55,12 @@ def main() -> None:
         http_host = "127.0.0.1"
 
     try:
-        server.run(http_port=args.http_port, http_host=http_host, mqtt_port=args.mqtt_port, mqtt_addr=args.mqtt_address)
+        server.run(
+            http_port=args.http_port,
+            http_host=http_host,
+            mqtt_port=args.mqtt_port,
+            mqtt_addr=args.mqtt_address,
+        )
     finally:
         if mosquitto_proc:
             mosquitto_proc.terminate()
