@@ -80,6 +80,7 @@
         <p><strong>Dronetag Sensors</strong></p>
         <p id="active-receivers">0 active</p>
         <ul id="receiver-list"></ul> <!-- Added list for receivers -->
+        <p><strong>AutoCenter on Drones: </strong><input type="checkbox" name="autocenter" id="autocenter"></p>
     </div>
     <div id="overview">
         <p><strong>Drone Overview</strong></p>
@@ -124,6 +125,7 @@
 
         var odidWs = null;
         var heartbeatWs = null;
+        var centerAutomatically = true;
 
         function connect() {
             const odidStatusElement = document.getElementById('odid-status');
@@ -327,7 +329,7 @@
                 updateDroneList(uasid, odidData.rssi, odidData.tech, odidData.odid.Location.Timestamp);
 
                 // Optionally, update map center if the marker is out of view
-                if (!map.getBounds().contains([lon, lat])) {
+                if (centerAutomatically && !map.getBounds().contains([lon, lat])) {
                     map.flyTo({
                         center: [lon, lat],
                         essential: true, // Ensure the flyTo action is triggered immediately
@@ -538,8 +540,14 @@
             });
         }
 
+        function autocenterHandler(e) {
+            centerAutomatically = e.target.checked;
+        }
+
         window.addEventListener('load', () => {
             document.getElementById('connect-button').addEventListener('click', connect);
+            document.getElementById('autocenter').checked = centerAutomatically;
+            document.getElementById('autocenter').addEventListener('click', autocenterHandler);
             document.getElementById('connection-url').placeholder = `${window.location.href}`;
             connect();
         });
