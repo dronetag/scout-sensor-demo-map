@@ -115,8 +115,8 @@
                     }
                 ]
             },
-            center: [13.4777, 52.3791], // Initial map center (Longitude, Latitude)
-            zoom: 13
+            center: [12.0817, 50.13971], // Initial map center (Longitude, Latitude)
+            zoom: 4
         });
 
         // Store UASID paths (keyed by UASID)
@@ -329,12 +329,13 @@
                 updateDroneList(uasid, odidData.rssi, odidData.tech, odidData.odid.Location.Timestamp);
 
                 // Optionally, update map center if the marker is out of view
-                if (centerAutomatically && !map.getBounds().contains([lon, lat])) {
+                if (centerAutomatically && (!map.getBounds().contains([lon, lat]) || map.getZoom() < 6.0)) {
                     map.flyTo({
                         center: [lon, lat],
                         essential: true, // Ensure the flyTo action is triggered immediately
                         speed: 0.5,
                         curve: 1,
+                        zoom: 12,
                         easing(t) {
                             return t;
                         }
@@ -363,7 +364,8 @@
                             map.flyTo({
                                 center: marker.getLngLat(),
                                 speed: 0.5,
-                                curve: 1
+                                curve: 1,
+                                zoom: map.getZoom() < 6 ? 12 : map.getZoom()
                             });
                         }
                     };
@@ -408,6 +410,7 @@
                         essential: true,
                         speed: 1,
                         curve: 1,
+                        zoom: map.getZoom() < 6 ? 12 : map.getZoom(),
                         easing(t) {
                             return t;
                         }
@@ -493,6 +496,7 @@
                             essential: true,
                             speed: 0.5,
                             curve: 1,
+                            zoom: map.getZoom() < 6 ? 12 : map.getZoom(),
                             easing(t) {
                                 return t;
                             }
@@ -531,6 +535,7 @@
                             essential: true,
                             speed: 0.5,
                             curve: 1,
+                            zoom: map.getZoom() < 6 ? 12 : map.getZoom(),
                             easing(t) {
                                 return t;
                             }
