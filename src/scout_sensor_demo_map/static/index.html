@@ -470,8 +470,8 @@
                 }
 
 
-                rec_position = receiver.data.gnss_position
-                rec_formattedPosition = rec_position ? `${rec_position[0].toFixed(1)}, ${rec_position[1].toFixed(1)}` : 'N/A';
+                rec_position = receiver.data.gnss_position?.reverse()  // in (lat, lon) format so we reverse to be map-compatible LngLat
+                rec_formattedPosition = rec_position ? `${rec_position[1].toFixed(1)}, ${rec_position[0].toFixed(1)}` : 'N/A';
                 if (rec_position && !receiver.marker) {
                     // Create a custom green marker element
                     const antennaMarker = document.createElement('div');
@@ -487,7 +487,7 @@
                     antennaMarker.style.borderRadius = '50%';             // Circle
                     antennaMarker.style.boxShadow = '0 0 3px rgba(0,0,0,0.3)'; // Optional shadow
                     antennaMarker.style.cursor = 'pointer';
-                    receiver.marker = new maplibregl.Marker({ element: antennaMarker }).setLngLat(rec_position.reverse()).addTo(map)
+                    receiver.marker = new maplibregl.Marker({ element: antennaMarker }).setLngLat(rec_position).addTo(map)
                         .setPopup(new maplibregl.Popup().setHTML(`<b>SN: ${sn}</b>`))
 
                     if (rec_position) {
@@ -506,7 +506,7 @@
 
                 // Update the marker position
                 if (rec_position && receiver.marker) {
-                    receivers[sn].marker.setLngLat(rec_position.reverse());
+                    receivers[sn].marker.setLngLat(rec_position);
                 }
 
                 // Update the content of the list item
