@@ -2,11 +2,13 @@
 /build
 /.vscode/launch.json
 
+.claude
 .venv
 .idea
 .gira_cache
 .mypy_cache
 .pytest_cache
+.ruff_cache
 
 *.egg-info
 *.pyc

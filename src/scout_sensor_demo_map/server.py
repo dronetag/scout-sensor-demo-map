@@ -1,14 +1,44 @@
 import asyncio
 import logging
 import os
-from typing import Dict, Optional, Set, Union, cast
+from typing import Awaitable, Callable, Optional, Set, cast
 
 import aiomqtt
+import jinja2
 from aiohttp import web
 
 logger = logging.getLogger("dt.receiver.map")
 
+
+@web.middleware
+async def forwarded_prefix_middleware(
+    request: web.Request,
+    handler: Callable[[web.Request], Awaitable[web.StreamResponse]],
+) -> web.StreamResponse:
+    prefix = request.headers.get("X-Forwarded-Prefix", "").rstrip("/")
+    if not prefix:
+        return await handler(request)
+    try:
+        response = await handler(request)
+    except web.HTTPException as exc:
+        if exc.status in (301, 302, 303, 307, 308):
+            location = exc.headers.get("Location", "")
+            if location.startswith("/"):
+                exc.headers["Location"] = prefix + location
+        raise
+    if response.status in (301, 302, 303, 307, 308):
+        location = response.headers.get("Location", "")
+        if location.startswith("/"):
+            response.headers["Location"] = prefix + location
+    return response
+
 STATIC_DIR: str = os.path.join(os.path.dirname(__file__), "static")
+TEMPLATES_DIR: str = os.path.join(os.path.dirname(__file__), "templates")
+
+_jinja_env = jinja2.Environment(
+    loader=jinja2.FileSystemLoader(TEMPLATES_DIR),
+    autoescape=jinja2.select_autoescape(["html", "jinja"]),
+)
 
 # Queues for incoming ODID and heartbeat messages
 odid_queue: asyncio.Queue[str] = asyncio.Queue()
@@ -19,9 +49,24 @@ odid_clients: Set[web.WebSocketResponse] = set()
 heartbeat_clients: Set[web.WebSocketResponse] = set()
 
 
+def _make_url_func(request: web.Request) -> Callable[[str], str]:
+    prefix = request.headers.get("X-Forwarded-Prefix", "").rstrip("/")
+    host = request.headers.get("X-Forwarded-Host", "") or request.headers.get("host", "")
+    proto = request.headers.get("X-Forwarded-Proto", request.scheme)
+
+    def url(path: str = "") -> str:
+        normalized = "/" + path.lstrip("/") if path else ""
+        return f"{proto}://{host}{prefix}{normalized}"
+
+    return url
+
+
 # ---- Serve Map on /
-async def handle_default(request: web.Request) -> web.FileResponse:
-    return web.FileResponse(os.path.join(STATIC_DIR, "index.html"))
+async def handle_default(request: web.Request) -> web.Response:
+    prefix = request.headers.get("X-Forwarded-Prefix", "").rstrip("/")
+    template = _jinja_env.get_template("index.jinja")
+    content = template.render(prefix=prefix, url=_make_url_func(request))
+    return web.Response(text=content, content_type="text/html")
 
 
 # ---------- WebSocket Broadcaster ----------
@@ -71,12 +116,7 @@ async def handle_heartbeat(request: web.Request) -> web.Response:
 
 # ---------- MQTT Subscriber with aiomqtt ----------
 async def mqtt_handler(mqtt_addr: str, mqtt_port: int) -> None:
-    client_kwargs: Dict[str, Union[str, int]] = {
-        "hostname": mqtt_addr,
-        "port": mqtt_port,
-    }
-
-    async with aiomqtt.Client(**client_kwargs) as client:
+    async with aiomqtt.Client(hostname=mqtt_addr, port=mqtt_port) as client:
         await client.subscribe("odid")
         await client.subscribe("heartbeat")
 
@@ -110,7 +150,7 @@ def run(
     mqtt_port: int = 1883,
     mqtt_addr: str = "",
 ) -> None:
-    app: web.Application = web.Application()
+    app: web.Application = web.Application(middlewares=[forwarded_prefix_middleware])
     app["mqtt_addr"] = mqtt_addr
     app["mqtt_port"] = mqtt_port
 
@@ -127,6 +167,6 @@ def run(
         ]
     )
 
-    app.on_startup.append(start_background)
-    app.on_cleanup.append(cleanup_background)
+    app.on_startup.append(start_background)  # type: ignore[arg-type]
+    app.on_cleanup.append(cleanup_background)  # type: ignore[arg-type]
     web.run_app(app, host=http_host, port=http_port)

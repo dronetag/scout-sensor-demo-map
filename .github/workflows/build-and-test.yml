@@ -86,10 +86,14 @@ jobs:
       - name: Install package
         run: pip install $(find dist/ -name '*.tar.gz')  --extra-index-url 'https://${{ secrets.PRIV_PIP_USER }}:${{ secrets.PRIV_PIP_PASSWORD }}@${{ secrets.PRIV_PIP_HOST }}'
 
+      - name: Install test dependencies
+        run: pip install pytest pytest-cov playwright pytest-playwright
+
+      - name: Install Playwright browsers
+        run: playwright install --with-deps chromium
+
       - name: Run tests with coverage
-        run: |
-          pip install pytest pytest-cov
-          pytest --cov | tee .pytest-coverage.txt; exit ${PIPESTATUS[0]}
+        run: pytest --cov | tee .pytest-coverage.txt; exit ${PIPESTATUS[0]}
 
       - name: Create coverage comment (great for examining pull-requests)
         id: coverage

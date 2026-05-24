@@ -1,2 +1,3 @@
 prune tests*
 include src/scout_sensor_demo_map/static/*
+include src/scout_sensor_demo_map/templates/*

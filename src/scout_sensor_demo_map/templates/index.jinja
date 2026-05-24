@@ -90,6 +90,9 @@
     </div>
 
     <script>
+        // Injected by server from X-Forwarded-Prefix header
+        const BASE_PATH = {{ prefix | tojson }};
+
         // Initialize the map using MapLibre GL JS with OSM road tiles
         const map = new maplibregl.Map({
             container: 'map',
@@ -132,39 +135,25 @@
             const heartbeatStatusElement = document.getElementById('heartbeat-status');
             const droneListElement = document.getElementById('drone-list');
 
-            // Get the connection URL from the input field
-            // Get connection URL input (if any)
             let connectionUrl = document.getElementById('connection-url').value.trim();
 
-            // Use provided connection URL or fallback to current page URL
-            let url = connectionUrl ? new URL(connectionUrl) : new URL(window.location.href);
-
-            // Extract hostname, port, and path
-            let hostname = url.hostname;
-            let path = url.pathname;
-
-            // Determine port: use explicitly set port, or infer from protocol
-            let port;
-            if (url.port) {
-                port = url.port;
-            } else if (url.protocol === "http:") {
-                port = "80";
-            } else if (url.protocol === "https:") {
-                port = "443";
+            let hostname, port, websocketPath, protocol;
+            if (connectionUrl) {
+                // User provided an explicit URL — honour it as-is
+                let url = new URL(connectionUrl);
+                hostname = url.hostname;
+                protocol = url.protocol === "https:" ? "wss" : "ws";
+                port = url.port || (url.protocol === "https:" ? "443" : "80");
+                let path = url.pathname.replace(/\/$/, '');
+                websocketPath = `${path}/ws`;
+            } else {
+                // Use current page origin + server-injected prefix
+                hostname = window.location.hostname;
+                protocol = window.location.protocol === "https:" ? "wss" : "ws";
+                port = window.location.port || (window.location.protocol === "https:" ? "443" : "80");
+                websocketPath = `${BASE_PATH}/ws`;
             }
 
-            // Remove trailing slash from path if it exists
-            if (path.endsWith('/')) {
-                path = path.slice(0, -1);
-            }
-
-            // Append /ws to the path
-            let websocketPath = `${path}/ws`;
-
-            // Use wss for https, ws otherwise
-            let protocol = url.protocol === "https:" ? "wss" : "ws";
-
-            // Construct the final WebSocket URL
             let wsUrl = `${protocol}://${hostname}:${port}${websocketPath}`;
 
             console.log("WebSocket URL:", wsUrl);
@@ -348,42 +337,6 @@
             }
         };
 
-
-        // Update drone list panel
-        function updateDroneList() {
-            // Clear the current list
-            droneListEl.innerHTML = '';
-
-            // Loop through the drones and create the list items
-            Object.keys(drones).forEach(uasid => {
-                const drone = drones[uasid];
-
-                let item = document.getElementById(`drone-${uasid}`);
-                if (!item) {
-                    item = document.createElement('li');
-                    item.id = `drone-${uasid}`;
-                    item.onclick = () => {
-                        const marker = uasPaths[uasid]?.marker;
-                        if (marker) {
-                            map.flyTo({
-                                center: marker.getLngLat(),
-                                speed: 0.5,
-                                curve: 1,
-                                zoom: map.getZoom() < 6 ? 12 : map.getZoom()
-                            });
-                        }
-                    };
-                    droneListEl.appendChild(item);
-                }
-
-                item.innerHTML = `
-            <strong>${drone.uasid}</strong><br>
-            RSSI: ${drone.rssi}, Tech: ${drone.tech}<br>
-            ${new Date(drone.timestamp).toLocaleTimeString()}
-        `;
-            });
-        }
-
         // Helper function to update the drone list in the overview
         function updateDroneList(uasid, rssi, tech, timestamp) {
             const droneListElement = document.getElementById('drone-list');
@@ -557,7 +510,7 @@
             document.getElementById('connect-button').addEventListener('click', connect);
             document.getElementById('autocenter').checked = centerAutomatically;
             document.getElementById('autocenter').addEventListener('click', autocenterHandler);
-            document.getElementById('connection-url').placeholder = `${window.location.href}`;
+            document.getElementById('connection-url').placeholder = `${window.location.origin}${BASE_PATH}`;
             connect();
         });
     </script>
