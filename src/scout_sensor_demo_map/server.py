@@ -32,7 +32,6 @@ async def forwarded_prefix_middleware(
             response.headers["Location"] = prefix + location
     return response
 
-STATIC_DIR: str = os.path.join(os.path.dirname(__file__), "static")
 TEMPLATES_DIR: str = os.path.join(os.path.dirname(__file__), "templates")
 
 _jinja_env = jinja2.Environment(
@@ -153,9 +152,6 @@ def run(
     app: web.Application = web.Application(middlewares=[forwarded_prefix_middleware])
     app["mqtt_addr"] = mqtt_addr
     app["mqtt_port"] = mqtt_port
-
-    # Serve static files
-    app.router.add_static("/static", path=STATIC_DIR, name="static")
 
     # Add routes
     app.add_routes(

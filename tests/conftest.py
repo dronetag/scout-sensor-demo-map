@@ -1,5 +1,4 @@
 import asyncio
-import os
 import socket
 import threading
 from typing import Generator
@@ -24,8 +23,6 @@ def live_server_url() -> Generator[str, None, None]:
 
     async def _serve() -> None:
         app = web.Application(middlewares=[server.forwarded_prefix_middleware])
-        if os.path.isdir(server.STATIC_DIR):
-            app.router.add_static("/static", path=server.STATIC_DIR, name="static")
         app.add_routes(
             [
                 web.post("/odid", server.handle_odid),
