@@ -65,7 +65,7 @@ async def handle_default(request: web.Request) -> web.Response:
     prefix = request.headers.get("X-Forwarded-Prefix", "").rstrip("/")
     template = _jinja_env.get_template("index.jinja")
     content = template.render(prefix=prefix, url=_make_url_func(request))
-    return web.Response(text=content, content_type="text/html")
+    return web.Response(text=content, content_type="text/html", headers={"Referrer-Policy": "origin"})
 
 
 # ---------- WebSocket Broadcaster ----------
