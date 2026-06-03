@@ -1,13 +1,65 @@
 import asyncio
+import json
 import logging
 import os
-from typing import Awaitable, Callable, Optional, Set, cast
+import time
+from datetime import date
+from pathlib import Path
+from typing import IO, Awaitable, Callable, Optional, Set, cast
 
 import aiomqtt
 import jinja2
 from aiohttp import web
 
 logger = logging.getLogger("dt.receiver.map")
+
+
+class MessageStorage:
+    def __init__(self, storage_dir: Path) -> None:
+        storage_dir.mkdir(parents=True, exist_ok=True)
+        self._storage_dir = storage_dir
+        self._date = date.today()
+        self._odid: IO[str] = open(self._odid_path(), "a")
+        self._heartbeat: IO[str] = open(self._heartbeat_path(), "a")
+        logger.info("Storage opened at %s", storage_dir)
+
+    def _odid_path(self) -> Path:
+        return self._storage_dir / f"telemetry_{self._date.isoformat()}.jsonl"
+
+    def _heartbeat_path(self) -> Path:
+        return self._storage_dir / f"heartbeat_{self._date.isoformat()}.jsonl"
+
+    def _rotate_if_needed(self) -> None:
+        today = date.today()
+        if today == self._date:
+            return
+        self._odid.close()
+        self._heartbeat.close()
+        self._date = today
+        self._odid = open(self._odid_path(), "a")
+        self._heartbeat = open(self._heartbeat_path(), "a")
+        logger.info("Storage rotated to %s", self._date.isoformat())
+
+    def _write(self, file: IO[str], data: str, source: str) -> None:
+        try:
+            parsed: object = json.loads(data)
+        except json.JSONDecodeError:
+            parsed = data
+        record = json.dumps({"received_at": time.time(), "source": source, "data": parsed})
+        file.write(record + "\n")
+        file.flush()
+
+    def write_odid(self, data: str, source: str) -> None:
+        self._rotate_if_needed()
+        self._write(self._odid, data, source)
+
+    def write_heartbeat(self, data: str, source: str) -> None:
+        self._rotate_if_needed()
+        self._write(self._heartbeat, data, source)
+
+    def close(self) -> None:
+        self._odid.close()
+        self._heartbeat.close()
 
 
 @web.middleware
@@ -101,6 +153,9 @@ async def websocket_handler(request: web.Request) -> web.WebSocketResponse:
 # ---------- HTTP Endpoints ----------
 async def handle_odid(request: web.Request) -> web.Response:
     data: str = await request.text()
+    storage = cast(Optional[MessageStorage], request.app.get("storage"))
+    if storage is not None:
+        storage.write_odid(data, "http")
     await odid_queue.put(data)
     logger.debug("HTTP ODID data received: %s", data)
     return web.Response(text="ODID Received")
@@ -108,13 +163,18 @@ async def handle_odid(request: web.Request) -> web.Response:
 
 async def handle_heartbeat(request: web.Request) -> web.Response:
     data: str = await request.text()
+    storage = cast(Optional[MessageStorage], request.app.get("storage"))
+    if storage is not None:
+        storage.write_heartbeat(data, "http")
     logger.debug("HTTP HEARTBEAT data received: %s", data)
     await heartbeat_queue.put(data)
     return web.Response(text="Heartbeat Received")
 
 
 # ---------- MQTT Subscriber with aiomqtt ----------
-async def mqtt_handler(mqtt_addr: str, mqtt_port: int) -> None:
+async def mqtt_handler(
+    mqtt_addr: str, mqtt_port: int, storage: Optional[MessageStorage] = None
+) -> None:
     async with aiomqtt.Client(hostname=mqtt_addr, port=mqtt_port) as client:
         await client.subscribe("odid")
         await client.subscribe("heartbeat")
@@ -124,16 +184,28 @@ async def mqtt_handler(mqtt_addr: str, mqtt_port: int) -> None:
             topic: str = message.topic.value
             if topic == "odid":
                 logger.debug("MQTT ODID data received: %s", payload)
+                if storage is not None:
+                    storage.write_odid(payload, "mqtt")
                 await odid_queue.put(payload)
             elif topic == "heartbeat":
                 logger.debug("MQTT HEARTBEAT data received: %s", payload)
+                if storage is not None:
+                    storage.write_heartbeat(payload, "mqtt")
                 await heartbeat_queue.put(payload)
 
 
 async def start_background(app: web.Application) -> None:
+    storage_path = cast(Optional[Path], app.get("storage_path"))
+    storage: Optional[MessageStorage] = None
+    if storage_path is not None:
+        storage = MessageStorage(storage_path)
+        app["storage"] = storage
+
     app["odid_broadcast"] = asyncio.create_task(broadcast(odid_queue, odid_clients))
     app["heartbeat_broadcast"] = asyncio.create_task(broadcast(heartbeat_queue, heartbeat_clients))
-    app["mqtt_task"] = asyncio.create_task(mqtt_handler(app["mqtt_addr"], app["mqtt_port"]))
+    app["mqtt_task"] = asyncio.create_task(
+        mqtt_handler(app["mqtt_addr"], app["mqtt_port"], storage)
+    )
 
 
 async def cleanup_background(app: web.Application) -> None:
@@ -141,6 +213,9 @@ async def cleanup_background(app: web.Application) -> None:
         task = cast(asyncio.Task[None], app.get(task_name))
         if task:
             task.cancel()
+    storage = cast(Optional[MessageStorage], app.get("storage"))
+    if storage is not None:
+        storage.close()
 
 
 def run(
@@ -148,10 +223,12 @@ def run(
     http_host: Optional[str] = None,
     mqtt_port: int = 1883,
     mqtt_addr: str = "",
+    storage_path: Optional[Path] = None,
 ) -> None:
     app: web.Application = web.Application(middlewares=[forwarded_prefix_middleware])
     app["mqtt_addr"] = mqtt_addr
     app["mqtt_port"] = mqtt_port
+    app["storage_path"] = storage_path
 
     # Add routes
     app.add_routes(

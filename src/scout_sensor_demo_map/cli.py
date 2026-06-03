@@ -3,6 +3,7 @@ import logging
 import shutil
 import subprocess
 import sys
+from pathlib import Path
 
 from . import server
 
@@ -33,6 +34,13 @@ def main() -> None:
     )
     parser.add_argument("--silent", action="store_true", help="Enable silent logging.")
     parser.add_argument("--debug", action="store_true", help="Enable debug logging.")
+    parser.add_argument(
+        "--storage",
+        type=Path,
+        default=None,
+        metavar="DIR",
+        help="Directory to persist received messages as JSONL files (heartbeat.jsonl, telemetry.jsonl).",
+    )
     args = parser.parse_args()
 
     # Set up logging
@@ -60,6 +68,7 @@ def main() -> None:
             http_host=http_host,
             mqtt_port=args.mqtt_port,
             mqtt_addr=args.mqtt_address,
+            storage_path=args.storage,
         )
     finally:
         if mosquitto_proc:
