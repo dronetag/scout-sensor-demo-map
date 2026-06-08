@@ -4,7 +4,7 @@
 default_install_hook_types:
   - pre-commit
   - commit-msg
-  # - prepare-commit-msg  # allow together with gira
+  - prepare-commit-msg  # allow together with gira
 
 default_stages:
   - pre-commit
@@ -53,8 +53,8 @@ repos:
     - id: commitlint
       stages: [commit-msg]
 
-  # - repo: https://github.com/dronetag/gira
-  #   rev: v1.1.0
-  #   hooks:
-  #   - id: gira
-  #     # args: [--config, pyproject.toml]
+  - repo: https://github.com/dronetag/gira
+    rev: v1.3.1
+    hooks:
+    - id: gira
+      args: [--config, pyproject.toml]
