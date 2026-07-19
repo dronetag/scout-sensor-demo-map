@@ -1,5 +1,24 @@
 # Changelog
 
+## 1.4.2 - unreleased
+
+### Added
+
+- Drone and aircraft popups show the GNSS altitude (WGS-84) when broadcast
+
+### Fixed
+
+- On the very first page load all targets could stay gray with popups stuck
+  at their initial content (while still moving): the `/state` bootstrap ran
+  before the map style finished loading, so creating the path layer threw
+  and skipped the rest of the message processing. Path layers are now
+  created independently (retried until the style is ready) and no longer
+  block timestamps, popups or list updates.
+- Stopping the service left it hanging until systemd's SIGKILL: connected
+  map clients kept their WebSockets open and the server waited for them
+  forever. All WebSockets are now closed on shutdown, background tasks are
+  awaited, and the shutdown timeout is capped at 10 s.
+
 ## 1.4.1 - 2026-07-19
 
 ### Fixed

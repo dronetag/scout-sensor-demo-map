@@ -415,35 +415,14 @@
 
                     uasPaths[uasid] = {
                         path: [],
+                        lastSeen: receivedAt,
                         marker: new maplibregl.Marker({ element: droneMarker }).setLngLat([lon, lat]).addTo(map)
                             .setPopup(popup)
                     };
 
-                    // Initialize GeoJSON source for the path
-                    map.addSource(uasid, {
-                        type: 'geojson',
-                        data: {
-                            type: 'FeatureCollection',
-                            features: [{
-                                type: 'Feature',
-                                geometry: {
-                                    type: 'LineString',
-                                    coordinates: []
-                                }
-                            }]
-                        }
-                    });
-
-                    // Create a LineLayer for the path
-                    map.addLayer({
-                        id: `${uasid}-path`,
-                        type: 'line',
-                        source: uasid,
-                        paint: {
-                            'line-color': '#007bff',
-                            'line-width': 2
-                        }
-                    });
+                    // GeoJSON source + line layer for the path; may be
+                    // deferred if the map style is still loading
+                    ensurePathLayer(uasid);
                 }
 
                 // Add new location to path
@@ -453,16 +432,21 @@
                 uasPaths[uasid].marker.setLngLat([lon, lat]);
 
                 // Update GeoJSON source data to reflect the new path
-                map.getSource(uasid).setData({
-                    type: 'FeatureCollection',
-                    features: [{
-                        type: 'Feature',
-                        geometry: {
-                            type: 'LineString',
-                            coordinates: uasPaths[uasid].path
-                        }
-                    }]
-                });
+                const pathSource = map.getSource(uasid);
+                if (pathSource) {
+                    pathSource.setData({
+                        type: 'FeatureCollection',
+                        features: [{
+                            type: 'Feature',
+                            geometry: {
+                                type: 'LineString',
+                                coordinates: uasPaths[uasid].path
+                            }
+                        }]
+                    });
+                } else {
+                    ensurePathLayer(uasid); // style was not loaded at creation - retry
+                }
 
                 uasPaths[uasid].lastSeen = receivedAt;
 
@@ -493,6 +477,9 @@
           <strong>Position:</strong> ${positionLink(lat, lon)}<br>
           <strong>Timestamp:</strong> ${parseUtcTimestamp(odidData.odid.Location.Timestamp).toLocaleString()}
         `;
+                if (location.AltitudeGeo != null) {
+                    popupContent += `<br><strong>GNSS Altitude (WGS-84):</strong> ${location.AltitudeGeo} m`;
+                }
                 if (isAviation && uasPaths[uasid].flight) {
                     popupContent += `<br><strong>Flight Number:</strong> ${uasPaths[uasid].flight}`;
                 }
@@ -605,6 +592,49 @@
             return `<a href="https://maps.google.com/?q=${lat},${lon}" target="_blank" rel="noopener"
                        onclick="event.stopPropagation()">${text}</a>`;
         }
+
+        // The path source/layer can only be created once the map style has
+        // loaded. On the very first page load the /state bootstrap often runs
+        // BEFORE that, so creation is retried on every message (seeded with
+        // the accumulated path) and once more on the map's load event.
+        function ensurePathLayer(uasid) {
+            if (map.getSource(uasid)) {
+                return;
+            }
+            try {
+                map.addSource(uasid, {
+                    type: 'geojson',
+                    data: {
+                        type: 'FeatureCollection',
+                        features: [{
+                            type: 'Feature',
+                            geometry: {
+                                type: 'LineString',
+                                coordinates: uasPaths[uasid].path
+                            }
+                        }]
+                    }
+                });
+                map.addLayer({
+                    id: `${uasid}-path`,
+                    type: 'line',
+                    source: uasid,
+                    paint: {
+                        'line-color': '#007bff',
+                        'line-width': 2
+                    }
+                });
+            } catch (e) {
+                // style not done loading yet - a later message or the map's
+                // load event will retry
+            }
+        }
+
+        map.on('load', () => {
+            for (const uasid of Object.keys(uasPaths)) {
+                ensurePathLayer(uasid);
+            }
+        });
 
         // The operator (pilot) of a drone, shown while the drone's popup is open
         function showOperatorMarker(uasid) {

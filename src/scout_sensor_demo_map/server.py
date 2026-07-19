@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Awaitable, Callable, Optional, cast
 
 import jinja2
-from aiohttp import web
+from aiohttp import WSCloseCode, web
 
 from . import bus
 from .ingest_http import handle_heartbeat, handle_odid
@@ -125,11 +125,22 @@ async def start_background(app: web.Application) -> None:
         )
 
 
+async def close_websockets(app: web.Application) -> None:
+    """Close every connected map client - open WebSockets otherwise keep the
+    server hanging on SIGTERM until systemd gives up and SIGKILLs it."""
+    for ws in list(bus.odid_clients | bus.heartbeat_clients):
+        await ws.close(code=WSCloseCode.GOING_AWAY, message=b"server shutdown")
+
+
 async def cleanup_background(app: web.Application) -> None:
-    for task_name in ["odid_broadcast", "heartbeat_broadcast", "mqtt_task"]:
-        task = cast(asyncio.Task[None], app.get(task_name))
-        if task:
-            task.cancel()
+    tasks = [
+        cast(asyncio.Task[None], app.get(task_name))
+        for task_name in ["odid_broadcast", "heartbeat_broadcast", "mqtt_task"]
+        if app.get(task_name)
+    ]
+    for task in tasks:
+        task.cancel()
+    await asyncio.gather(*tasks, return_exceptions=True)
     storage = cast(Optional[MessageStorage], app.get("storage"))
     if storage is not None:
         storage.close()
@@ -156,6 +167,7 @@ def create_app(
     )
 
     app.on_startup.append(start_background)  # type: ignore[arg-type]
+    app.on_shutdown.append(close_websockets)  # type: ignore[arg-type]
     app.on_cleanup.append(cleanup_background)  # type: ignore[arg-type]
     return app
 
@@ -168,4 +180,4 @@ def run(
     storage_path: Optional[Path] = None,
 ) -> None:
     app = create_app(mqtt_addr=mqtt_addr, mqtt_port=mqtt_port, storage_path=storage_path)
-    web.run_app(app, host=http_host, port=http_port)
+    web.run_app(app, host=http_host, port=http_port, shutdown_timeout=10.0)
