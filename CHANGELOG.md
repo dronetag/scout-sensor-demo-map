@@ -5,6 +5,11 @@
 ### Added
 
 - Drone and aircraft popups show the GNSS altitude (WGS-84) when broadcast
+- Popups show the target **category** (ASTM UA type: Aeroplane, Helicopter, Jet, Multirotor, Glider, ...) and helicopters get a helicopter map icon
+
+### Changed
+
+- The aviation "Flight Number" field is now correctly labeled **Callsign** (popups and the Aviation Overview)
 
 ### Fixed
 

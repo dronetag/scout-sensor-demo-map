@@ -223,6 +223,29 @@
         // Technologies that mark a target as aviation (aircraft) instead of a drone
         const AVIATION_TECHS = ["AB", "AL", "OG", "UT"];
 
+        // ASTM F3411 UA types (+ the extended aviation-only value 16 = Jet)
+        const UA_TYPES = {
+            0: "Undeclared", 1: "Aeroplane", 2: "Helicopter / Multirotor", 3: "Gyroplane",
+            4: "Hybrid Lift", 5: "Ornithopter", 6: "Glider", 7: "Kite",
+            8: "Free Balloon", 9: "Captive Balloon", 10: "Airship", 11: "Parachute",
+            12: "Rocket", 13: "Tethered Powered Aircraft", 14: "Ground Obstacle", 15: "Other",
+            16: "Jet",
+        };
+
+        function categoryLabel(uaType, isAviation) {
+            if (uaType === 2) {
+                return isAviation ? "Helicopter" : "Multirotor";
+            }
+            return UA_TYPES[uaType] ?? `Unknown (${uaType})`;
+        }
+
+        function markerIcon(uaType, isAviation) {
+            if (isAviation) {
+                return uaType === 2 ? '🚁' : '✈️';
+            }
+            return '🛸';
+        }
+
         function connect() {
             const odidStatusElement = document.getElementById('odid-status');
             const heartbeatStatusElement = document.getElementById('heartbeat-status');
@@ -384,15 +407,12 @@
             const lat = location?.Latitude;
             const lon = location?.Longitude;
             const isAviation = AVIATION_TECHS.includes(odidData.tech);
+            const uaType = odidData.odid.BasicID[0]?.UAType;
 
             if (lat && lon) {
                 if (!uasPaths[uasid]) {
                     const droneMarker = document.createElement('div');
-                    if (isAviation) {
-                        droneMarker.innerText = '✈️';
-                    } else {
-                        droneMarker.innerText = '🛸';
-                    }
+                    droneMarker.innerText = markerIcon(uaType, isAviation);
                     droneMarker.style.fontSize = '20px';
                     droneMarker.style.display = 'flex';
                     droneMarker.style.alignItems = 'center';
@@ -450,7 +470,17 @@
 
                 uasPaths[uasid].lastSeen = receivedAt;
 
-                // Remember the last known registration (maker/model) and flight number -
+                // Remember the category and keep the marker icon matching it
+                if (uaType != null) {
+                    uasPaths[uasid].uaType = uaType;
+                    const icon = markerIcon(uaType, isAviation);
+                    const element = uasPaths[uasid].marker.getElement();
+                    if (element.innerText !== icon) {
+                        element.innerText = icon;
+                    }
+                }
+
+                // Remember the last known registration (maker/model) and callsign -
                 // they only arrive on some of the messages
                 if (odidData.registration) {
                     uasPaths[uasid].registration = odidData.registration;
@@ -477,11 +507,14 @@
           <strong>Position:</strong> ${positionLink(lat, lon)}<br>
           <strong>Timestamp:</strong> ${parseUtcTimestamp(odidData.odid.Location.Timestamp).toLocaleString()}
         `;
+                if (uasPaths[uasid].uaType != null) {
+                    popupContent += `<br><strong>Category:</strong> ${categoryLabel(uasPaths[uasid].uaType, isAviation)}`;
+                }
                 if (location.AltitudeGeo != null) {
                     popupContent += `<br><strong>GNSS Altitude (WGS-84):</strong> ${location.AltitudeGeo} m`;
                 }
                 if (isAviation && uasPaths[uasid].flight) {
-                    popupContent += `<br><strong>Flight Number:</strong> ${uasPaths[uasid].flight}`;
+                    popupContent += `<br><strong>Callsign:</strong> ${uasPaths[uasid].flight}`;
                 }
                 if (!isAviation && uasPaths[uasid].operator) {
                     popupContent += `<br><strong>Operator:</strong> ${positionLink(...uasPaths[uasid].operator)}`;
@@ -540,7 +573,7 @@
             Timestamp: ${parseUtcTimestamp(odidData.odid.Location.Timestamp).toLocaleString()}
         `;
             if (isAviation && uasPaths[uasid]?.flight) {
-                content += `<br>Flight Number: ${uasPaths[uasid].flight}`;
+                content += `<br>Callsign: ${uasPaths[uasid].flight}`;
             }
             const registration = uasPaths[uasid]?.registration;
             if (!isAviation && registration) {
