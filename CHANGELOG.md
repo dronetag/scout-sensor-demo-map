@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.4.1 - 2026-07-19
+
+### Fixed
+
+- Drone/aircraft timestamps were shown as the raw UTC clock value: ODID timestamps arrive as naive ISO strings (no `Z`) and the browser read them as local time. They are now marked as UTC before parsing, so they convert to the browser's timezone like the sensor timestamps already did.
+
 ## 1.4.0 - 2026-07-19
 
 ### Added

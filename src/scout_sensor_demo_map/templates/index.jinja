@@ -491,7 +491,7 @@
           <strong>RSSI:</strong> ${odidData.rssi} dBm<br>
           <strong>Technology:</strong> ${odidData.tech}<br>
           <strong>Position:</strong> ${positionLink(lat, lon)}<br>
-          <strong>Timestamp:</strong> ${new Date(odidData.odid.Location.Timestamp).toLocaleString()}
+          <strong>Timestamp:</strong> ${parseUtcTimestamp(odidData.odid.Location.Timestamp).toLocaleString()}
         `;
                 if (isAviation && uasPaths[uasid].flight) {
                     popupContent += `<br><strong>Flight Number:</strong> ${uasPaths[uasid].flight}`;
@@ -550,7 +550,7 @@
             <strong>${uasid}</strong><br>
             RSSI: ${odidData.rssi} dBm<br>
             Tech: ${odidData.tech}<br>
-            Timestamp: ${new Date(odidData.odid.Location.Timestamp).toLocaleString()}
+            Timestamp: ${parseUtcTimestamp(odidData.odid.Location.Timestamp).toLocaleString()}
         `;
             if (isAviation && uasPaths[uasid]?.flight) {
                 content += `<br>Flight Number: ${uasPaths[uasid].flight}`;
@@ -586,6 +586,16 @@
                     }
                 }
             };
+        }
+
+        // ODID timestamps are UTC but arrive as naive ISO strings (no "Z");
+        // without marking them as UTC the browser would read them as local
+        // time and display the UTC clock value unconverted
+        function parseUtcTimestamp(value) {
+            if (typeof value === "string" && !/(?:[zZ]|[+-]\d{2}:?\d{2})$/.test(value)) {
+                return new Date(value + "Z");
+            }
+            return new Date(value);
         }
 
         // Coordinates as a clickable Google Maps link (stopPropagation so a
