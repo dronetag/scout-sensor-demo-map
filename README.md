@@ -213,3 +213,9 @@ The tests start a local aiohttp server (no MQTT required) and use a headless Chr
 
 - the page renders with the map and UI controls visible
 - both WebSocket endpoints (`/ws/odid` and `/ws/heartbeat`) reach the "Connected" state
+
+---
+
+## License
+
+This project is licensed under the [MIT License](LICENSE).
