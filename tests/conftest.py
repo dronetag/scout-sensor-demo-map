@@ -22,19 +22,8 @@ def live_server_url() -> Generator[str, None, None]:
     ready = threading.Event()
 
     async def _serve() -> None:
-        app = web.Application(middlewares=[server.forwarded_prefix_middleware])
-        app.add_routes(
-            [
-                web.post("/odid", server.handle_odid),
-                web.post("/heartbeat", server.handle_heartbeat),
-                web.get("/ws/{type}", server.websocket_handler),
-                web.get("/", server.handle_default),
-            ]
-        )
-        asyncio.create_task(server.broadcast(server.odid_queue, server.odid_clients))
-        asyncio.create_task(
-            server.broadcast(server.heartbeat_queue, server.heartbeat_clients)
-        )
+        # no MQTT broker in tests - create_app skips the MQTT task without an address
+        app = server.create_app()
         runner = web.AppRunner(app)
         await runner.setup()
         site = web.TCPSite(runner, "localhost", port)

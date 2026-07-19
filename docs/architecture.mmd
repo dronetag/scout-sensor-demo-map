@@ -1,0 +1,24 @@
+flowchart LR
+    subgraph scout["Dronetag SCOUT sensor"]
+        RID["RID receivers<br/>(Bluetooth / Wi-Fi / ADS-B)"] --> FWD["JSON+ODIDv2 forwarder<br/>(gzip compression, batching)"]
+    end
+
+    FWD -- "HTTP POST<br/>/odid + /heartbeat" --> HTTP["ingest_http.py"]
+    FWD -. "MQTT topics<br/>odid + heartbeat" .-> MQTT["ingest_mqtt.py"]
+
+    subgraph server["scout-sensor-demo-map server"]
+        HTTP --> PAYLOAD["payload.py<br/>decompress + split batches"]
+        MQTT --> PAYLOAD
+        PAYLOAD --> BUS["bus.py<br/>publish"]
+        BUS --> STATE["state.py - RecentState<br/>last 5 min, deduplicated"]
+        BUS --> STORAGE["storage.py<br/>JSONL logs (optional)"]
+        BUS --> BCAST["bus.py<br/>broadcast tasks"]
+    end
+
+    subgraph client["Browser map (index.jinja)"]
+        BOOT["instant bootstrap<br/>at page load"] --> MAP["MapLibre map<br/>Drone + Aviation overviews"]
+        LIVE["live updates"] --> MAP
+    end
+
+    BCAST -- "WebSocket<br/>/ws/odid + /ws/heartbeat" --> LIVE
+    STATE -- "GET /state" --> BOOT

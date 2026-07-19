@@ -19,8 +19,9 @@
             right: 20px;
             background: rgba(0, 0, 0, 0.7);
             color: white;
-            padding: 10px;
+            padding: 0;
             border-radius: 5px;
+            overflow: hidden;
         }
 
         #receiver-status {
@@ -29,34 +30,110 @@
             left: 20px;
             background: rgba(0, 0, 0, 0.7);
             color: white;
-            padding: 10px;
+            padding: 0;
             border-radius: 5px;
+            overflow: hidden;
+        }
+
+        .panel-body {
+            padding: 0 10px 10px;
+        }
+
+        #overview,
+        #aviation-overview {
+            position: absolute;
+            bottom: 20px;
+            background: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 0;
+            border-radius: 5px;
+            /* never grow up under the top panels */
+            max-height: min(600px, calc(100vh - 380px));
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        #ws-status a,
+        #receiver-status a,
+        #overview a,
+        #aviation-overview a {
+            color: #8ab4f8;
         }
 
         #overview {
-            position: absolute;
-            bottom: 20px;
             left: 20px;
-            background: rgba(0, 0, 0, 0.7);
-            color: white;
-            padding: 10px;
-            border-radius: 5px;
-            max-height: 600px;
-            overflow-y: auto;
-            width: 200px;
+            width: 270px;
         }
 
-        #overview ul {
+        #aviation-overview {
+            right: 20px;
+            width: 290px;
+        }
+
+        /* The title stays on top - only the list below it scrolls */
+        .overview-title {
+            flex: 0 0 auto;
+            margin: 0;
+            padding: 10px;
+            background: rgba(0, 0, 0, 0.85);
+        }
+
+        #overview ul,
+        #aviation-overview ul {
             list-style-type: none;
-            padding: 0;
+            margin: 0;
+            padding: 0 10px 10px;
+            flex: 1 1 auto;
+            overflow-y: auto;
+        }
+
+        /* The drone list scrolls on its LEFT edge (rtl container, ltr items),
+           the aviation list on its right */
+        #overview ul {
+            direction: rtl;
         }
 
         #overview li {
+            direction: ltr;
+            text-align: left;
+        }
+
+        /* Firefox scrollbars (setting these in Chromium would disable the
+           ::-webkit-scrollbar styling below) */
+        @supports not selector(::-webkit-scrollbar) {
+
+            #overview ul,
+            #aviation-overview ul {
+                scrollbar-width: thin;
+                scrollbar-color: rgba(255, 255, 255, 0.7) rgba(255, 255, 255, 0.15);
+            }
+        }
+
+        #overview ul::-webkit-scrollbar,
+        #aviation-overview ul::-webkit-scrollbar {
+            width: 10px;
+        }
+
+        #overview ul::-webkit-scrollbar-thumb,
+        #aviation-overview ul::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.7);
+            border-radius: 5px;
+        }
+
+        #overview ul::-webkit-scrollbar-track,
+        #aviation-overview ul::-webkit-scrollbar-track {
+            background: rgba(255, 255, 255, 0.15);
+        }
+
+        #overview li,
+        #aviation-overview li {
             padding: 5px;
             cursor: pointer;
         }
 
-        #overview li:hover {
+        #overview li:hover,
+        #aviation-overview li:hover {
             background-color: rgba(255, 255, 255, 0.2);
         }
     </style>
@@ -66,26 +143,38 @@
 
     <div id="map"></div>
     <div id="ws-status">
-        <div class="flex">
-            <label for="connection-url">Connection:</label>
-            <input type="text" id="connection-url" placeholder="localhost" value="" style="margin-bottom: 10px;">
-            <button id="connect-button">Connect</button>
+        <p class="overview-title"><strong>Configuration</strong></p>
+        <div class="panel-body">
+            <div class="flex">
+                <label for="connection-url">Connection:</label>
+                <input type="text" id="connection-url" placeholder="localhost" value="" style="margin-bottom: 10px;">
+                <button id="connect-button">Connect</button>
+            </div>
+            <p id="connection-status"><strong>Connection Status</strong></p>
+            <p id="odid-status">Data: <span style="color: red;">Disconnected</span></p>
+            <p id="heartbeat-status">Heartbeat: <span style="color: red;">Disconnected</span></p>
+            <p><strong>AutoCenter on Drones: </strong><input type="checkbox" name="autocenter" id="autocenter"></p>
+            <p><strong>AutoCenter on Sensor: </strong><input type="checkbox" name="autocenter-sensor" id="autocenter-sensor"></p>
         </div>
-        <p id="connection-status"><strong>Connection Status</strong></p>
-        <p id="odid-status">Data: <span style="color: red;">Disconnected</span></p>
-        <p id="heartbeat-status">Heartbeat: <span style="color: red;">Disconnected</span></p>
     </div>
     <!-- Active Receiver Summary (Updated) -->
     <div id="receiver-status">
-        <p><strong>Dronetag Sensors</strong></p>
-        <p id="active-receivers">0 active</p>
-        <ul id="receiver-list"></ul> <!-- Added list for receivers -->
-        <p><strong>AutoCenter on Drones: </strong><input type="checkbox" name="autocenter" id="autocenter"></p>
+        <p class="overview-title"><strong>Dronetag Sensors</strong></p>
+        <div class="panel-body">
+            <p id="active-receivers">0 active</p>
+            <ul id="receiver-list"></ul> <!-- Added list for receivers -->
+        </div>
     </div>
     <div id="overview">
-        <p><strong>Drone Overview</strong></p>
+        <p class="overview-title"><strong>Drone Overview</strong></p>
         <ul id="drone-list">
             <!-- Drone list items will be populated here -->
+        </ul>
+    </div>
+    <div id="aviation-overview">
+        <p class="overview-title"><strong>Aviation Overview</strong></p>
+        <ul id="aviation-list">
+            <!-- Aviation list items will be populated here -->
         </ul>
     </div>
 
@@ -128,7 +217,11 @@
 
         var odidWs = null;
         var heartbeatWs = null;
-        var centerAutomatically = true;
+        var centerAutomatically = false; // AutoCenter on Drones
+        var centerOnSensor = true; // AutoCenter on Sensor
+
+        // Technologies that mark a target as aviation (aircraft) instead of a drone
+        const AVIATION_TECHS = ["AB", "AL", "OG", "UT"];
 
         function connect() {
             const odidStatusElement = document.getElementById('odid-status');
@@ -146,15 +239,18 @@
                 port = url.port || (url.protocol === "https:" ? "443" : "80");
                 let path = url.pathname.replace(/\/$/, '');
                 websocketPath = `${path}/ws`;
+                basePath = path;
             } else {
                 // Use current page origin + server-injected prefix
                 hostname = window.location.hostname;
                 protocol = window.location.protocol === "https:" ? "wss" : "ws";
                 port = window.location.port || (window.location.protocol === "https:" ? "443" : "80");
                 websocketPath = `${BASE_PATH}/ws`;
+                basePath = BASE_PATH;
             }
 
             let wsUrl = `${protocol}://${hostname}:${port}${websocketPath}`;
+            const stateUrl = `${protocol === "wss" ? "https" : "http"}://${hostname}:${port}${basePath}/state`;
 
             console.log("WebSocket URL:", wsUrl);
             console.log(`Requested connection to ${hostname}:${port}`);
@@ -173,12 +269,28 @@
             }
             document.getElementById('connection-status').innerHTML = '<strong>Connection Status:</strong> Connecting...';
 
-            // Clear existing paths and markers
+            // Remove markers, paths and sources of the previous connection
+            for (const uasid of Object.keys(uasPaths)) {
+                uasPaths[uasid].operatorMarker?.remove();
+                uasPaths[uasid].marker.remove();
+                if (map.getLayer(`${uasid}-path`)) {
+                    map.removeLayer(`${uasid}-path`);
+                }
+                if (map.getSource(uasid)) {
+                    map.removeSource(uasid);
+                }
+            }
+            for (const sn of Object.keys(receivers)) {
+                receivers[sn].marker?.remove();
+            }
             uasPaths = {};
             receivers = {}; // Reset receivers
 
-            // Clear the drone list in the overview section
+            // Clear the lists in the overview sections
             droneListElement.innerHTML = '';
+            document.getElementById('aviation-list').innerHTML = '';
+            document.getElementById('receiver-list').innerHTML = '';
+            document.getElementById('active-receivers').innerHTML = '0 active';
 
             // Create WebSocket connections for ODID and Heartbeat
             odidWs = new WebSocket(`${wsUrl}/odid`);
@@ -222,12 +334,46 @@
 
             odidWs.onmessage = onmessage_odid; // Assign the onmessage function to handle ODID data
             heartbeatWs.onmessage = onmessage_heartbeat; // Assign the onmessage function to handle Heartbeat data
+
+            // Load the current state (last 5 minutes, one entry per sensor
+            // and per UASID) so the map is populated instantly
+            fetch(stateUrl)
+                .then((resp) => resp.json())
+                .then((state) => {
+                    for (const entry of state.heartbeat) {
+                        try {
+                            processHeartbeatData(entry.message, entry.received_at * 1000);
+                        } catch (e) {
+                            console.warn("Could not process stored heartbeat:", e);
+                        }
+                    }
+                    for (const entry of state.odid) {
+                        try {
+                            processOdidData(entry.message, entry.received_at * 1000);
+                        } catch (e) {
+                            console.warn("Could not process stored detection:", e);
+                        }
+                    }
+                })
+                .catch((e) => console.warn("Could not load the current state:", e));
         }
 
-        // Handling ODID data (Drones)
+        // Handling ODID data (Drones) - a websocket message may carry several
+        // newline-separated JSON messages (batching), process every one
         function onmessage_odid(event) {
-            var datas = event.data.trim().split("\n"); // trim removes trailing newlines
-            const odidData = JSON.parse(datas[datas.length - 1]);
+            for (const line of event.data.trim().split("\n")) {
+                if (!line.trim()) {
+                    continue;
+                }
+                try {
+                    processOdidData(JSON.parse(line));
+                } catch (e) {
+                    console.warn("Could not process ODID message:", e, line);
+                }
+            }
+        };
+
+        function processOdidData(odidData, receivedAt = Date.now()) {
             const uasid = odidData.odid.BasicID[0]?.UASID;
 
             if (!uasid) {
@@ -237,11 +383,12 @@
             const location = odidData.odid.Location;
             const lat = location?.Latitude;
             const lon = location?.Longitude;
+            const isAviation = AVIATION_TECHS.includes(odidData.tech);
 
             if (lat && lon) {
                 if (!uasPaths[uasid]) {
                     const droneMarker = document.createElement('div');
-                    if(odidData.tech == "AB" || odidData.tech == "AL" || odidData.tech == "OG" || odidData.tech == "UT") {
+                    if (isAviation) {
                         droneMarker.innerText = '✈️';
                     } else {
                         droneMarker.innerText = '🛸';
@@ -257,11 +404,19 @@
                     droneMarker.style.borderRadius = '50%';             // Circle
                     droneMarker.style.boxShadow = '0 0 3px rgba(0,0,0,0.3)'; // Optional shadow
                     droneMarker.style.cursor = 'pointer';
+                    // Inspecting a target means the map should stop jumping away
+                    droneMarker.addEventListener('click', disableAutocenter);
+
+                    // While the popup is open, the drone's operator position
+                    // (when known) is shown as an extra marker
+                    const popup = new maplibregl.Popup().setHTML(`<b>UASID: ${uasid}</b><br>Path of the drone`);
+                    popup.on('open', () => showOperatorMarker(uasid));
+                    popup.on('close', () => hideOperatorMarker(uasid));
 
                     uasPaths[uasid] = {
                         path: [],
                         marker: new maplibregl.Marker({ element: droneMarker }).setLngLat([lon, lat]).addTo(map)
-                            .setPopup(new maplibregl.Popup().setHTML(`<b>UASID: ${uasid}</b><br>Path of the drone`))
+                            .setPopup(popup)
                     };
 
                     // Initialize GeoJSON source for the path
@@ -309,20 +464,59 @@
                     }]
                 });
 
-                // Add a popup with structured information for the drone marker
-                const popupContent = `
+                uasPaths[uasid].lastSeen = receivedAt;
+
+                // Remember the last known registration (maker/model) and flight number -
+                // they only arrive on some of the messages
+                if (odidData.registration) {
+                    uasPaths[uasid].registration = odidData.registration;
+                }
+                if (isAviation && odidData.odid.SelfID?.Desc) {
+                    uasPaths[uasid].flight = odidData.odid.SelfID.Desc.trim();
+                }
+                // Operator position comes in the System message (0/0 = unknown)
+                const system = odidData.odid.System;
+                if (!isAviation && system?.OperatorLatitude && system?.OperatorLongitude) {
+                    uasPaths[uasid].operator = [system.OperatorLatitude, system.OperatorLongitude];
+                    if (uasPaths[uasid].operatorMarker) {
+                        uasPaths[uasid].operatorMarker.setLngLat([system.OperatorLongitude, system.OperatorLatitude]);
+                    } else if (uasPaths[uasid].marker.getPopup().isOpen()) {
+                        showOperatorMarker(uasid); // operator became known while the popup is open
+                    }
+                }
+
+                // Add a popup with structured information for the marker
+                let popupContent = `
           <strong>UASID:</strong> ${uasid}<br>
           <strong>RSSI:</strong> ${odidData.rssi} dBm<br>
           <strong>Technology:</strong> ${odidData.tech}<br>
+          <strong>Position:</strong> ${positionLink(lat, lon)}<br>
           <strong>Timestamp:</strong> ${new Date(odidData.odid.Location.Timestamp).toLocaleString()}
         `;
-                uasPaths[uasid].marker.setPopup(new maplibregl.Popup().setHTML(popupContent));
+                if (isAviation && uasPaths[uasid].flight) {
+                    popupContent += `<br><strong>Flight Number:</strong> ${uasPaths[uasid].flight}`;
+                }
+                if (!isAviation && uasPaths[uasid].operator) {
+                    popupContent += `<br><strong>Operator:</strong> ${positionLink(...uasPaths[uasid].operator)}`;
+                }
+                const registration = uasPaths[uasid].registration;
+                if (!isAviation && registration) {
+                    popupContent += `
+          <br><strong>Manufacturer:</strong> ${registration.maker}<br>
+          <strong>Model:</strong> ${registration.model}${registration.certain === false ? ' (best guess)' : ''}
+        `;
+                }
+                // Update the content in place - replacing the popup would
+                // close an open one; an open popup follows the marker to its
+                // updated position by itself
+                uasPaths[uasid].marker.getPopup().setHTML(popupContent);
 
-                // Update the drone list in the overview section
-                updateDroneList(uasid, odidData.rssi, odidData.tech, odidData.odid.Location.Timestamp);
+                // Update the drone or aviation list in the overview sections
+                updateOverviewList(uasid, odidData, isAviation);
+                refreshStaleness();
 
-                // Optionally, update map center if the marker is out of view
-                if (centerAutomatically && (!map.getBounds().contains([lon, lat]) || map.getZoom() < 6.0)) {
+                // Optionally, update map center if the marker is out of view (drones only)
+                if (!isAviation && centerAutomatically && (!map.getBounds().contains([lon, lat]) || map.getZoom() < 6.0)) {
                     map.flyTo({
                         center: [lon, lat],
                         essential: true, // Ensure the flyTo action is triggered immediately
@@ -337,31 +531,45 @@
             }
         };
 
-        // Helper function to update the drone list in the overview
-        function updateDroneList(uasid, rssi, tech, timestamp) {
-            const droneListElement = document.getElementById('drone-list');
-            // Check if the drone already exists in the list
-            let listItem = document.getElementById(`drone-${uasid}`);
+        // Helper function to update the drone/aviation lists in the overviews
+        function updateOverviewList(uasid, odidData, isAviation) {
+            const listElement = document.getElementById(isAviation ? 'aviation-list' : 'drone-list');
+            const itemId = `${isAviation ? 'aviation' : 'drone'}-${uasid}`;
+            // Check if the target already exists in the list
+            let listItem = document.getElementById(itemId);
 
-            // If the drone does not exist, create a new list item
+            // If the target does not exist, create a new list item
             if (!listItem) {
                 listItem = document.createElement('li');
-                listItem.id = `drone-${uasid}`;  // Assign a unique ID based on UASID
-                droneListElement.appendChild(listItem);
+                listItem.id = itemId;  // Assign a unique ID based on UASID
+                listElement.appendChild(listItem);
             }
 
             // Update the content of the existing or new list item
-            listItem.innerHTML = `
+            let content = `
             <strong>${uasid}</strong><br>
-            RSSI: ${rssi} dBm<br>
-            Tech: ${tech}<br>
-            Timestamp: ${new Date(timestamp).toLocaleString()}
+            RSSI: ${odidData.rssi} dBm<br>
+            Tech: ${odidData.tech}<br>
+            Timestamp: ${new Date(odidData.odid.Location.Timestamp).toLocaleString()}
         `;
+            if (isAviation && uasPaths[uasid]?.flight) {
+                content += `<br>Flight Number: ${uasPaths[uasid].flight}`;
+            }
+            const registration = uasPaths[uasid]?.registration;
+            if (!isAviation && registration) {
+                content += `
+            <br>Manufacturer: ${registration.maker}<br>
+            Model: ${registration.model}${registration.certain === false ? ' (best guess)' : ''}
+        `;
+            }
+            listItem.innerHTML = content;
 
-            // Add click functionality to center the map on the drone's marker
+            // Add click functionality to center the map on the target's
+            // marker and open its popup
             listItem.onclick = function () {
                 const marker = uasPaths[uasid]?.marker;
                 if (marker) {
+                    disableAutocenter(); // focusing a target - stop re-centering elsewhere
                     map.flyTo({
                         center: marker.getLngLat(),
                         essential: true,
@@ -372,14 +580,88 @@
                             return t;
                         }
                     });
+                    closeAllPopups(marker.getPopup()); // one open popup at a time
+                    if (!marker.getPopup().isOpen()) {
+                        marker.togglePopup();
+                    }
                 }
             };
         }
 
+        // Coordinates as a clickable Google Maps link (stopPropagation so a
+        // click on the link does not also trigger the list item's flyTo)
+        function positionLink(lat, lon) {
+            const text = `${lat.toFixed(5)}, ${lon.toFixed(5)}`;
+            return `<a href="https://maps.google.com/?q=${lat},${lon}" target="_blank" rel="noopener"
+                       onclick="event.stopPropagation()">${text}</a>`;
+        }
+
+        // The operator (pilot) of a drone, shown while the drone's popup is open
+        function showOperatorMarker(uasid) {
+            const operator = uasPaths[uasid]?.operator;
+            if (!operator || uasPaths[uasid].operatorMarker) {
+                return;
+            }
+            const element = document.createElement('div');
+            element.innerText = '🎮';
+            element.title = `Operator of ${uasid}`;
+            element.style.fontSize = '16px';
+            element.style.display = 'flex';
+            element.style.alignItems = 'center';
+            element.style.justifyContent = 'center';
+            element.style.width = '30px';
+            element.style.height = '30px';
+            element.style.backgroundColor = '#ffd54f';       // operator = amber
+            element.style.border = '2px solid black';
+            element.style.borderRadius = '50%';
+            element.style.boxShadow = '0 0 3px rgba(0,0,0,0.3)';
+            uasPaths[uasid].operatorMarker = new maplibregl.Marker({ element })
+                .setLngLat([operator[1], operator[0]]).addTo(map);
+        }
+
+        function hideOperatorMarker(uasid) {
+            uasPaths[uasid]?.operatorMarker?.remove();
+            if (uasPaths[uasid]) {
+                uasPaths[uasid].operatorMarker = null;
+            }
+        }
+
+        // Close every open marker popup except the given one
+        function closeAllPopups(except) {
+            for (const entry of Object.values(uasPaths)) {
+                const popup = entry.marker.getPopup();
+                if (popup !== except && popup.isOpen()) {
+                    entry.marker.togglePopup();
+                }
+            }
+            for (const receiver of Object.values(receivers)) {
+                const popup = receiver.marker?.getPopup();
+                if (popup && popup !== except && popup.isOpen()) {
+                    receiver.marker.togglePopup();
+                }
+            }
+        }
+
+        // Turn both autocenter modes off - used when the user focuses a
+        // drone/plane so the map does not fly away from it
+        function disableAutocenter() {
+            centerAutomatically = false;
+            centerOnSensor = false;
+            document.getElementById('autocenter').checked = false;
+            document.getElementById('autocenter-sensor').checked = false;
+        }
+
         // Handling Heartbeat data
         function onmessage_heartbeat(event) {
+            try {
+                processHeartbeatData(JSON.parse(event.data));
+            } catch (e) {
+                console.warn("Could not process heartbeat message:", e, event.data);
+            }
+        };
+
+        function processHeartbeatData(heartbeatData, receivedAt = Date.now()) {
             const activeReceiversElement = document.getElementById('active-receivers');
-            const heartbeatData = JSON.parse(event.data);
 
             // Update active receivers count and display
             const sn = heartbeatData.sn;
@@ -397,13 +679,64 @@
             } else {
                 receivers[sn].data = heartbeatData
             }
+            receivers[sn].lastSeen = receivedAt;
 
             // Update active receiver count display
             activeReceiversElement.innerHTML = `Active: ${Object.keys(receivers).length}`;
 
             // Update the receivers list in the UI
             updateReceiverList();
+            refreshStaleness();
+
+            // AutoCenter on Sensor follows the LATEST active sensor - the one
+            // this heartbeat came from: center it when first seen or whenever
+            // it is out of the current view
+            const marker = receivers[sn].marker;
+            if (centerOnSensor && marker) {
+                const lngLat = marker.getLngLat();
+                if (!receivers[sn].centered || !map.getBounds().contains(lngLat)) {
+                    fitToSensor(lngLat.toArray());
+                    receivers[sn].centered = true;
+                }
+            }
         };
+
+        // Markers with no fresh data for 2 minutes turn gray
+        const STALE_AFTER_MS = 2 * 60 * 1000;
+
+        function applyStaleness(marker, lastSeen, freshBackground) {
+            const element = marker.getElement();
+            const stale = Date.now() - (lastSeen || 0) > STALE_AFTER_MS;
+            element.style.backgroundColor = stale ? '#9e9e9e' : freshBackground;
+            element.style.filter = stale ? 'grayscale(1) opacity(0.75)' : '';
+        }
+
+        function refreshStaleness() {
+            for (const entry of Object.values(uasPaths)) {
+                applyStaleness(entry.marker, entry.lastSeen, 'white');
+            }
+            for (const receiver of Object.values(receivers)) {
+                if (receiver.marker) {
+                    applyStaleness(receiver.marker, receiver.lastSeen, 'green');
+                }
+            }
+        }
+
+        setInterval(refreshStaleness, 10_000);
+
+        // Center the map on a point with radiusKm of space on each side
+        function fitKmAround(lngLat, radiusKm) {
+            const lon = lngLat[0];
+            const lat = lngLat[1];
+            const dLat = radiusKm / 110.574; // km in degrees of latitude
+            const dLon = radiusKm / (111.320 * Math.cos(lat * Math.PI / 180)); // km in degrees of longitude
+            map.fitBounds([[lon - dLon, lat - dLat], [lon + dLon, lat + dLat]], { padding: 20 });
+        }
+
+        // Center the map on a sensor with at least 20 km of space on each side
+        function fitToSensor(lngLat) {
+            fitKmAround(lngLat, 20);
+        }
 
         // Function to update the receiver list
         function updateReceiverList() {
@@ -427,8 +760,10 @@
                 }
 
 
-                rec_position = receiver.data.gnss_position?.reverse()  // in (lat, lon) format so we reverse to be map-compatible LngLat
-                rec_formattedPosition = rec_position ? `${rec_position[1].toFixed(1)}, ${rec_position[0].toFixed(1)}` : 'N/A';
+                // gnss_position is (lat, lon) so we swap to map-compatible LngLat (without mutating the data)
+                rec_position = receiver.data.gnss_position ? [receiver.data.gnss_position[1], receiver.data.gnss_position[0]] : null
+                rec_formattedPosition = rec_position ? `${rec_position[1].toFixed(5)}, ${rec_position[0].toFixed(5)}` : 'N/A';
+                rec_positionHtml = rec_position ? positionLink(rec_position[1], rec_position[0]) : 'N/A';
                 if (rec_position && !receiver.marker) {
                     // Create a custom green marker element
                     const antennaMarker = document.createElement('div');
@@ -446,33 +781,22 @@
                     antennaMarker.style.cursor = 'pointer';
                     receiver.marker = new maplibregl.Marker({ element: antennaMarker }).setLngLat(rec_position).addTo(map)
                         .setPopup(new maplibregl.Popup().setHTML(`<b>SN: ${sn}</b>`))
-
-                    if (rec_position) {
-                        map.flyTo({
-                            center: rec_position,
-                            essential: true,
-                            speed: 0.5,
-                            curve: 1,
-                            zoom: map.getZoom() < 6 ? 12 : map.getZoom(),
-                            easing(t) {
-                                return t;
-                            }
-                        });
-                    }
                 }
 
                 // Update the marker position
                 if (rec_position && receiver.marker) {
                     receivers[sn].marker.setLngLat(rec_position);
+                    receivers[sn].marker.getPopup().setHTML(
+                        `<b>SN: ${sn}</b><br><strong>Position:</strong> ${rec_positionHtml}`);
                 }
 
                 // Update the content of the list item
                 listItem.innerHTML = `
             <strong>SN: ${sn}</strong><br>
-            GNSS Position: ${rec_formattedPosition}<br>
+            GNSS Position: ${rec_positionHtml}<br>
             GNSS Satellites: ${receiver.data.gnss_satellites}<br>
             Active Receivers: ${receiver.data.receivers}<br>
-            Timestamp: ${new Date(receiver.data.timestamp * 1000).toISOString()}
+            Timestamp: ${new Date(receiver.data.timestamp * 1000).toLocaleString()}
             `;
 
                 // Add hover effect with detailed information on hover
@@ -481,7 +805,7 @@
                 GNSS Position: ${rec_formattedPosition}
                 Satellites: ${receiver.data.gnss_satellites}
                 Active Receivers: ${receiver.data.receivers}
-                Timestamp: ${new Date(receiver.data.timestamp * 1000).toISOString()}
+                Timestamp: ${new Date(receiver.data.timestamp * 1000).toLocaleString()}
             `;
 
                 // You can also add click functionality if needed for other features (like centering the map on receiver position)
@@ -506,10 +830,64 @@
             centerAutomatically = e.target.checked;
         }
 
+        function autocenterSensorHandler(e) {
+            centerOnSensor = e.target.checked;
+            if (!centerOnSensor) {
+                return;
+            }
+            // Re-center on the latest active sensor (freshest heartbeat)
+            const latest = Object.values(receivers)
+                .filter((receiver) => receiver.marker)
+                .sort((a, b) => (b.lastSeen || 0) - (a.lastSeen || 0))[0];
+            if (latest) {
+                fitToSensor(latest.marker.getLngLat().toArray());
+            }
+        }
+
+        // A good opening view: zoom to the country the browser is likely in.
+        // The timezone ("Europe/Prague") pinpoints the country even when the
+        // browser UI language is foreign (en-US); the locale region is the
+        // fallback. Nominatim resolves the country outline; on any failure
+        // the default view simply stays. A sensor position arriving first
+        // wins - it is more specific.
+        async function nominatim(query) {
+            const resp = await fetch(`https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&${query}`);
+            return (await resp.json())[0];
+        }
+
+        async function zoomToLocaleCountry() {
+            try {
+                let country = "";
+                const timezoneCity = (Intl.DateTimeFormat().resolvedOptions().timeZone || "")
+                    .split("/").pop().replace(/_/g, " ");
+                if (timezoneCity) {
+                    const place = await nominatim(`city=${encodeURIComponent(timezoneCity)}&addressdetails=1`);
+                    country = place?.address?.country_code || "";
+                }
+                if (!country) {
+                    country = new Intl.Locale(navigator.language).maximize().region || "";
+                }
+                if (!country) {
+                    return;
+                }
+                const boundingbox = (await nominatim(`country=${country}`))?.boundingbox; // [south, north, west, east]
+                if (!boundingbox || Object.values(receivers).some((receiver) => receiver.marker)) {
+                    return;
+                }
+                map.fitBounds([[+boundingbox[2], +boundingbox[0]], [+boundingbox[3], +boundingbox[1]]],
+                    { padding: 20 });
+            } catch (e) {
+                console.warn("Could not zoom to the locale country:", e);
+            }
+        }
+
         window.addEventListener('load', () => {
             document.getElementById('connect-button').addEventListener('click', connect);
+            zoomToLocaleCountry();
             document.getElementById('autocenter').checked = centerAutomatically;
             document.getElementById('autocenter').addEventListener('click', autocenterHandler);
+            document.getElementById('autocenter-sensor').checked = centerOnSensor;
+            document.getElementById('autocenter-sensor').addEventListener('click', autocenterSensorHandler);
             document.getElementById('connection-url').placeholder = `${window.location.origin}${BASE_PATH}`;
             connect();
         });

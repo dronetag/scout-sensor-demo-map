@@ -2,6 +2,27 @@
 
 Scout Sensor Demo Map is a receiving side of SCOUT data. It provides an interactive map webpage showing drone positions and receiver statuses from SCOUT sensors via HTTP and MQTT.
 
+## What this project demonstrates
+
+![Architecture: from the SCOUT sensor through HTTP/MQTT ingestion to the browser map](docs/architecture.png)
+
+*(diagram source: [`docs/architecture.mmd`](docs/architecture.mmd))*
+
+The server is intentionally small and split by concern, so it doubles as a reference implementation for ingesting SCOUT data into your own system:
+
+| Module | What it shows |
+|--------|---------------|
+| [`ingest_http.py`](src/scout_sensor_demo_map/ingest_http.py) | Receiving SCOUT's **JSON+ODIDv2 over HTTP** forwarder — detections POSTed to `/odid`, status heartbeats to `/heartbeat` |
+| [`ingest_mqtt.py`](src/scout_sensor_demo_map/ingest_mqtt.py) | The same data consumed from an **MQTT broker** (`odid` and `heartbeat` topics) |
+| [`payload.py`](src/scout_sensor_demo_map/payload.py) | SCOUT's wire format: gzip transport compression and message batching (`\n`, `\r\n`, concatenated or JSON array) |
+| [`bus.py`](src/scout_sensor_demo_map/bus.py) | Fan-out of every ingested message to the connected WebSocket map clients, persistence and state bookkeeping |
+| [`state.py`](src/scout_sensor_demo_map/state.py) | A last-5-minutes deduplicated airspace snapshot behind the `/state` endpoint, so a freshly opened map starts populated |
+| [`storage.py`](src/scout_sensor_demo_map/storage.py) | Optional daily-rotated JSONL persistence of everything received |
+| [`server.py`](src/scout_sensor_demo_map/server.py) | The aiohttp application: map page, WebSocket endpoints, `/state`, reverse-proxy prefix handling |
+| [`templates/index.jinja`](src/scout_sensor_demo_map/templates/index.jinja) | The MapLibre map page consuming the WebSockets |
+
+Both ingestion paths accept the same payloads and publish onto the same bus, so everything downstream (live WebSockets, `/state`, storage) is transport-agnostic.
+
 ## Requirements
 
 - Python 3.10+
@@ -26,16 +47,24 @@ scout-sensor-demo-map --http-port 9090
 
 ### 3 — Configure the SCOUT in its web interface
 
-Open `http://<scout-ip>:8080` in your browser (replace `<scout-ip>` with the IP printed on your SCOUT device or shown in your router's device list).
+Open `https://<scout-ip>/forwarding` in your browser (replace `<scout-ip>` with the IP printed on your SCOUT device or shown in your router's device list).
 
-In the SCOUT management UI add the following forwarders — replace `<your-ip>` with the address from step 1:
+In the SCOUT UI click **+ add new** and choose **JSON+ODIDv2 over HTTP**, then fill in — replace `<your-ip>` with the address from step 1:
 
-| Forwarder type | URL to enter |
-|----------------|--------------|
-| **ODID / telemetry** | `http://<your-ip>:9090/odid` |
-| **Heartbeat** | `http://<your-ip>:9090/heartbeat` |
+| Field | Value |
+|-------|-------|
+| **URL** | `<your-ip>:9090/odid` |
+| **Sources** | check `drones` and `status` |
+| **Status Path** | `/heartbeat` |
+| **Format** | `odid` |
 
-Click **Save** after each entry.
+Leave the remaining fields at their defaults and click **Create**. A correctly configured and connected forwarder looks like this (click its header to fold/unfold the settings):
+
+<img src="docs/scout-forwarder-config.png" alt="SCOUT UI - JSON+ODIDv2 over HTTP forwarder configured for the sensor map" width="480">
+
+The tile's **Status** should show `AUTHENTICATED` and the **Sent** counter should start increasing as heartbeats (and drone detections, when a drone is nearby) are forwarded to the map.
+
+Details about the Dronetag Scout forwarder configuration can be found in the [Dronetag Scout help](https://help.dronetag.com/dronetag-scout/configuration/scout-heartbeat-forwarders).
 
 ### 4 — Open the map
 
