@@ -136,10 +136,52 @@
         #aviation-overview li:hover {
             background-color: rgba(255, 255, 255, 0.2);
         }
+
+        /* Shown (and covering everything else) only when WebGL is unavailable */
+        #webgl-error {
+            position: fixed;
+            inset: 0;
+            z-index: 10;
+            background: #1a1a1a;
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            font-family: sans-serif;
+        }
+
+        #webgl-error[hidden] {
+            display: none;
+        }
+
+        .webgl-error-box {
+            max-width: 520px;
+            background: rgba(0, 0, 0, 0.7);
+            border-radius: 5px;
+            padding: 20px 25px;
+            line-height: 1.5;
+        }
+
+        .webgl-error-box h1 {
+            margin-top: 0;
+            font-size: 1.4em;
+        }
     </style>
 </head>
 
 <body>
+
+    <div id="webgl-error" hidden>
+        <div class="webgl-error-box">
+            <h1>WebGL is not available</h1>
+            <p>This map is drawn with WebGL, but your browser could not create a WebGL
+                context, so the map and the live targets cannot be displayed.</p>
+            <p>Please open this page in a browser with WebGL support (a current Firefox,
+                Chrome, Edge or Safari) and check that hardware acceleration / WebGL is not
+                disabled in its settings.</p>
+        </div>
+    </div>
 
     <div id="map"></div>
     <div id="ws-status">
@@ -182,8 +224,30 @@
         // Injected by server from X-Forwarded-Prefix header
         const BASE_PATH = {{ prefix | tojson }};
 
+        function webglSupported() {
+            // MapLibre's own probe knows which extensions it actually needs
+            if (typeof maplibregl !== 'undefined' && typeof maplibregl.supported === 'function') {
+                return maplibregl.supported();
+            }
+            try {
+                const canvas = document.createElement('canvas');
+                return !!(window.WebGLRenderingContext &&
+                    (canvas.getContext('webgl') || canvas.getContext('experimental-webgl')));
+            } catch (e) {
+                return false;
+            }
+        }
+
+        // Without WebGL the map cannot be created — show the error instead and keep
+        // the rest of the page inert (map stays null, nothing connects).
+        const WEBGL_OK = webglSupported();
+        if (!WEBGL_OK) {
+            document.getElementById('webgl-error').hidden = false;
+            console.error("WebGL is not available — the map cannot be displayed.");
+        }
+
         // Initialize the map using MapLibre GL JS with OSM road tiles
-        const map = new maplibregl.Map({
+        const map = !WEBGL_OK ? null : new maplibregl.Map({
             container: 'map',
             style: {
                 "version": 8,
@@ -663,7 +727,7 @@
             }
         }
 
-        map.on('load', () => {
+        map?.on('load', () => {
             for (const uasid of Object.keys(uasPaths)) {
                 ensurePathLayer(uasid);
             }
@@ -955,6 +1019,9 @@
         }
 
         window.addEventListener('load', () => {
+            if (!WEBGL_OK) {
+                return;
+            }
             document.getElementById('connect-button').addEventListener('click', connect);
             zoomToLocaleCountry();
             document.getElementById('autocenter').checked = centerAutomatically;
