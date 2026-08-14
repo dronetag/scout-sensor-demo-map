@@ -28,50 +28,6 @@ Both ingestion paths accept the same payloads and publish onto the same bus, so 
 - Python 3.10+
 - MQTT broker (e.g. [mosquitto](https://mosquitto.org/))
 
-## How to point your SCOUT to the Sensor Map
-
-### 1 — Find your machine's local IP address
-
-```sh
-ip a          # Linux — look for the inet address on your LAN interface (e.g. eth0, wlan0)
-ipconfig      # Windows
-```
-
-Example result: `192.168.1.42`
-
-### 2 — Start the map server
-
-```sh
-scout-sensor-demo-map --http-port 9090
-```
-
-### 3 — Configure the SCOUT in its web interface
-
-Open `https://<scout-ip>/forwarding` in your browser (replace `<scout-ip>` with the IP printed on your SCOUT device or shown in your router's device list).
-
-In the SCOUT UI click **+ add new** and choose **JSON+ODIDv2 over HTTP**, then fill in — replace `<your-ip>` with the address from step 1:
-
-| Field | Value |
-|-------|-------|
-| **URL** | `<your-ip>:9090/odid` |
-| **Sources** | check `drones` and `status` |
-| **Status Path** | `/heartbeat` |
-| **Format** | `odid` |
-
-Leave the remaining fields at their defaults and click **Create**. A correctly configured and connected forwarder looks like this (click its header to fold/unfold the settings):
-
-<img src="docs/scout-forwarder-config.png" alt="SCOUT UI - JSON+ODIDv2 over HTTP forwarder configured for the sensor map" width="480">
-
-The tile's **Status** should show `AUTHENTICATED` and the **Sent** counter should start increasing as heartbeats (and drone detections, when a drone is nearby) are forwarded to the map.
-
-Details about the Dronetag Scout forwarder configuration can be found in the [Dronetag Scout help](https://help.dronetag.com/dronetag-scout/configuration/scout-heartbeat-forwarders).
-
-### 4 — Open the map
-
-Navigate to `http://localhost:9090` in your browser. The status indicators should turn green ("Connected") and drone positions will start appearing as data arrives.
-
----
-
 ## Installation
 
 Make sure you have Python 3.10 or later installed (`python --version`).
@@ -159,6 +115,55 @@ Example:
 ```sh
 scout-sensor-demo-map --storage /var/log/scout-map
 ```
+
+---
+
+
+## How to point your SCOUT to the Sensor Map
+
+### 1 — Find your machine's local IP address
+
+```sh
+ip a          # Linux — look for the inet address on your LAN interface (e.g. eth0, wlan0)
+ipconfig      # Windows
+```
+
+Example result: `192.168.1.42`
+
+### 2 — Start the map server
+
+```sh
+scout-sensor-demo-map --http-port 9090
+```
+
+### 3 — Configure the SCOUT in its web interface
+
+Open `https://<scout-ip>/forwarding` in your browser (replace `<scout-ip>` with the IP printed on your SCOUT device or shown in your router's device list).
+
+In the SCOUT UI click **+ add new** and choose **JSON+ODIDv2 over HTTP**, then fill in — replace `<your-ip>` with the address from step 1:
+
+| Field | Value |
+|-------|-------|
+| **URL** | `<your-ip>:9090/odid` |
+| **Sources** | check `drones` and `status` |
+| **Status Path** | `/heartbeat` |
+| **Format** | `odid` |
+
+Leave the remaining fields at their defaults and click **Create**. A correctly configured and connected forwarder looks like this (click its header to fold/unfold the settings):
+
+<img src="docs/scout-forwarder-config.png" alt="SCOUT UI - JSON+ODIDv2 over HTTP forwarder configured for the sensor map" width="480">
+
+The tile's **Status** should show `AUTHENTICATED` and the **Sent** counter should start increasing as heartbeats (and drone detections, when a drone is nearby) are forwarded to the map.
+
+Details about the Dronetag Scout forwarder configuration can be found in the [Dronetag Scout help](https://help.dronetag.com/dronetag-scout/configuration/scout-heartbeat-forwarders).
+
+#### Note for MQTT deployment
+
+If you want to use the application with MQTT broker, currently the application has hard-coded topics it subscribes to and you have to set your Scout to publish *Drones Topic* on `odid` topic and *Status Topic* on `heartbeat` topic.
+
+### 4 — Open the map
+
+Navigate to `http://localhost:9090` in your browser. The status indicators should turn green ("Connected") and drone positions will start appearing as data arrives.
 
 ---
 
