@@ -157,6 +157,10 @@ The tile's **Status** should show `AUTHENTICATED` and the **Sent** counter shoul
 
 Details about the Dronetag Scout forwarder configuration can be found in the [Dronetag Scout help](https://help.dronetag.com/dronetag-scout/configuration/scout-heartbeat-forwarders).
 
+#### Note for MQTT deployment
+
+If you want to use the application with MQTT broker, currently the application has hard-coded topics it subscribes to and you have to set your Scout to publish *Drones Topic* on `odid` topic and *Status Topic* on `heartbeat` topic.
+
 ### 4 — Open the map
 
 Navigate to `http://localhost:9090` in your browser. The status indicators should turn green ("Connected") and drone positions will start appearing as data arrives.
